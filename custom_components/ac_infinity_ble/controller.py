@@ -109,10 +109,16 @@ class MultiPortController(PortAwareController):
         self.port_states: dict[int, PortState] = {p: PortState() for p in ports}
 
     async def update(self) -> None:
-        """Read every configured port in one connected session."""
-        await self._ensure_connected()
-        try:
-            for port in self._port_indices:
+        """Read each configured port in its own connected session.
+
+        The controller reliably answers only one ``get_model_data`` per BLE
+        connection; batching all ports into a single session makes every read
+        after the first time out (the notify future is cancelled). Reconnect
+        per port so each read is the only command on its connection.
+        """
+        for port in self._port_indices:
+            await self._ensure_connected()
+            try:
                 command = self._protocol.get_model_data(
                     self._state.type, port, self.sequence
                 )
@@ -122,9 +128,9 @@ class MultiPortController(PortAwareController):
                         level_off=data[15],
                         level_on=data[18],
                     )
-            self._fire_callbacks(CallbackType.UPDATE_RESPONSE)
-        finally:
-            await self._execute_disconnect()
+            finally:
+                await self._execute_disconnect()
+        self._fire_callbacks(CallbackType.UPDATE_RESPONSE)
 
     async def set_port_level(self, port: int, work_type: int, level: int) -> None:
         """Set one port to a work_type (1=off, 2=on) and level (0-10)."""

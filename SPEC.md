@@ -82,26 +82,29 @@ Verified on a Controller 69 Pro (choose_port = 1):
 
 ## Multi-port control (office: 2 fans + grow light)
 
-Implemented in code, **🚧 NOT YET VERIFIED on the live office controller** —
-the office 69 Pro is still on Wi-Fi/cloud and cannot advertise BLE until it is
-switched to Bluetooth mode (see hardware prerequisite). The verification steps
-below MUST pass before this is trusted.
+Office 69 Pro is in **BLE mode** (G-622UC, `48:CA:43:81:9F:E6`). Verified
+2026-06-15: with the per-port-reconnect read (below) the controller polls all
+three ports with **0 poll failures**, and a `light.turn_off` write to port 3
+fires with no BLE error. Physical per-port isolation (each entity moves only
+its own load) is the remaining owner-confirmation step.
 
 Design:
 - A config entry gains per-port behaviour when its `data`/`options` carries a
-  `ports` list (`const.CONF_PORTS`), e.g.:
+  `ports` list (`const.CONF_PORTS`). Live office entry (`G-622UC`):
   ```json
   "ports": [
-    {"port": 0, "kind": "fan",   "name": "Office Fan Port 1"},
-    {"port": 1, "kind": "fan",   "name": "Office Fan Port 2"},
-    {"port": 2, "kind": "light", "name": "Bathroom Grow Light"}
+    {"port": 1, "kind": "fan",   "name": "Office Fan Port 1"},
+    {"port": 2, "kind": "fan",   "name": "Office Fan Port 2"},
+    {"port": 3, "kind": "light", "name": "Bathroom Grow Light"}
   ]
   ```
 - `controller.py::MultiPortController` keeps a `port_states: dict[int,
-  PortState]` and reads every configured port in one connected session
-  (`get_model_data(type, port, seq)` per port; the link stays open for
-  `DISCONNECT_DELAY`). Writes go to a single port via
-  `set_port_level(port, work_type, level)`.
+  PortState]` and reads each configured port in **its own** connect/disconnect
+  cycle (`get_model_data(type, port, seq)`, one command per connection). The
+  controller answers only the first command per BLE connection, so batching all
+  ports into one session times out every read after the first
+  (`CancelledError`) and fails the whole poll — reconnect per port instead.
+  Writes go to a single port via `set_port_level(port, work_type, level)`.
 - `fan.py::ACInfinityPortFan` and `light.py::ACInfinityGrowLight` each bind to
   a fixed port index (not `choose_port`). `__init__.py` selects
   `MultiPortController` + the FAN/LIGHT/SENSOR platforms when a port map exists.
@@ -110,16 +113,18 @@ Office port map (read from the live cloud device registry, controller id
 `1424979258063479287`): Port 1 = Office Fan Port 1, Port 2 = Office Fan Port 2,
 Port 3 = Bathroom Grow Light, Port 4 = unused.
 
-**Unverified assumption:** BLE port index is zero-based (cloud "Port N" -> BLE
-index N-1), so the map above uses indices 0/1/2. This base MUST be confirmed by
-probing the live controller (set port 0 and observe which physical load moves)
-before relying on it; if it is one-based, shift every `port` by +1.
+**BLE port index is one-based** (cloud "Port N" -> BLE byte N), confirmed: the
+controller advertises `choose_port = 1`, and `get_model_data(type, 1, seq)`
+returns valid data while the cloud registry calls the same load "Port 1". The
+live map therefore uses indices 1/2/3.
 
-Verification (run once office is in BLE mode):
-- Probe each port: `get_model_data(type, b, seq)` for b in 0..3, confirm which
-  index moves which physical load; fix the port map accordingly.
-- `fan.set_percentage` on each fan entity changes only that fan.
-- `light.turn_on`/brightness on the light entity changes only the light.
+Verification:
+- ✅ Per-port reads succeed for all three ports (0 poll failures after the
+  per-port-reconnect change, 2026-06-15).
+- ✅ `light.turn_off` write to port 3 fires with no BLE error.
+- ⏳ Owner to confirm physical isolation: `fan.set_percentage` on each fan
+  entity changes only that fan; `light.turn_on`/brightness changes only the
+  light.
 - The grow-light on-device sunrise/sunset schedule is lost in BLE; it is driven
   from the Node-RED "Plant Light" flow against the new `light.*` entity.
 
