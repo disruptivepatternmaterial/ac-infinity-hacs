@@ -46,6 +46,8 @@ class ACInfinitySensor(
 ):
     """Representation of AC Infinity sensor."""
 
+    _attr_has_entity_name = True
+
     def __init__(
         self,
         coordinator: ACInfinityDataUpdateCoordinator,
@@ -85,13 +87,10 @@ class ACInfinitySensor(
 
 
 class TemperatureSensor(ACInfinitySensor):
+    _attr_name = "Temperature"
     _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
     _attr_device_class = SensorDeviceClass.TEMPERATURE
     _attr_state_class = SensorStateClass.MEASUREMENT
-
-    @property
-    def name(self) -> str:
-        return f"{self._name} Temperature"
 
     @property
     def unique_id(self) -> str:
@@ -111,10 +110,6 @@ class HumiditySensor(ACInfinitySensor):
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     @property
-    def name(self) -> str:
-        return f"{self._name} Humidity"
-
-    @property
     def unique_id(self) -> str:
         """Return a unique, Home Assistant friendly identifier for this entity."""
         return f"{self._device.address}_hum"
@@ -126,13 +121,10 @@ class HumiditySensor(ACInfinitySensor):
 
 
 class VpdSensor(ACInfinitySensor):
+    _attr_name = "VPD"
     _attr_native_unit_of_measurement = UnitOfPressure.KPA
     _attr_device_class = SensorDeviceClass.ATMOSPHERIC_PRESSURE
     _attr_state_class = SensorStateClass.MEASUREMENT
-
-    @property
-    def name(self) -> str:
-        return f"{self._name} VPD"
 
     @property
     def unique_id(self) -> str:

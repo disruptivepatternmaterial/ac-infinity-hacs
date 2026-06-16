@@ -57,6 +57,7 @@ class ACInfinityGrowLight(
 ):
     """A grow light bound to a fixed UIS port on a multi-port controller."""
 
+    _attr_has_entity_name = True
     _attr_color_mode = ColorMode.BRIGHTNESS
     _attr_supported_color_modes = {ColorMode.BRIGHTNESS}
 

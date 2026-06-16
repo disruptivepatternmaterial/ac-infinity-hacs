@@ -52,6 +52,8 @@ class ACInfinityFan(
 ):
     """Representation of AC Infinity sensor."""
 
+    _attr_has_entity_name = True
+    _attr_name = "Fan"
     _attr_speed_count = int_states_in_range(SPEED_RANGE)
     _attr_supported_features = (
         FanEntityFeature.SET_SPEED
@@ -68,7 +70,6 @@ class ACInfinityFan(
         """Initialize an AC Infinity sensor."""
         super().__init__(coordinator)
         self._device = device
-        self._attr_name = f"{name} Fan"
         self._attr_unique_id = f"{self._device.address}_fan"
         self._attr_device_info = DeviceInfo(
             name=device.name,
@@ -139,6 +140,7 @@ class ACInfinityPortFan(
 ):
     """A fan bound to a fixed UIS port on a multi-port controller."""
 
+    _attr_has_entity_name = True
     _attr_speed_count = int_states_in_range(SPEED_RANGE)
     _attr_supported_features = (
         FanEntityFeature.SET_SPEED

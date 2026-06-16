@@ -12,11 +12,14 @@ from .coordinator import ACInfinityDataUpdateCoordinator
 class PortConfig:
     """Static configuration for one UIS port on a multi-port controller.
 
-    ``port`` is the zero-based BLE port index passed to the protocol
-    (``get_model_data``/``set_level``). It is one less than the 1-based port
-    number shown on the controller screen and used by the AC Infinity cloud
-    (cloud "Port 1" -> BLE index 0). This mapping must be verified against the
-    live controller before being trusted (see SPEC.md).
+    ``port`` is the one-based BLE port index passed to the protocol
+    (``get_model_data``/``set_level``); it matches the port number printed on
+    the controller and used by the AC Infinity cloud (cloud "Port 1" -> BLE
+    byte ``ff01``). Verified live against G-622UC on 2026-06-15: bytes
+    ``ff01``/``ff02``/``ff03`` each return that port's data (see SPEC.md).
+
+    ``name`` is the role-only entity name (e.g. "Fan 1", "Bathroom Grow
+    Light"); Home Assistant prepends the device name via ``has_entity_name``.
     """
 
     port: int
