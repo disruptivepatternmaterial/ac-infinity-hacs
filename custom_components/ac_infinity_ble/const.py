@@ -1,7 +1,7 @@
 """Constants for the ac_infinity integration."""
 from bleak.exc import BleakError
 
-DOMAIN = "ac_infinity"
+DOMAIN = "ac_infinity_ble"
 
 DEVICE_TIMEOUT = 30
 UPDATE_SECONDS = 15

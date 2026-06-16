@@ -1,5 +1,5 @@
 {
-    "name": "AC Infinity",
+    "name": "AC Infinity (BLE)",
     "render_readme": true,
     "homeassistant": "2026.3.4"
 }
