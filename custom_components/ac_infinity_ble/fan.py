@@ -78,6 +78,8 @@ class ACInfinityFan(
             speed = math.ceil(percentage_to_ranged_value(SPEED_RANGE, percentage))
 
         await self._device.set_speed(speed)
+        self._async_update_attrs()
+        self.async_write_ha_state()
 
     async def async_turn_on(
         self,
@@ -90,10 +92,14 @@ class ACInfinityFan(
         if percentage is not None:
             speed = math.ceil(percentage_to_ranged_value(SPEED_RANGE, percentage))
         await self._device.turn_on(speed)
+        self._async_update_attrs()
+        self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the fan."""
         await self._device.turn_off()
+        self._async_update_attrs()
+        self.async_write_ha_state()
 
     @callback
     def _async_update_attrs(self) -> None:

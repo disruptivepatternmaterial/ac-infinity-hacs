@@ -6,6 +6,12 @@ This fork is maintained at https://github.com/disruptivepatternmaterial/ac-infin
 
 See [SPEC.md](SPEC.md) for the current behavior, deployed state, and known limitations.
 
+1.0.6 (disruptivepatternmaterial)
+
+Fixed the Home Assistant UI showing stale fan/sensor state. The controller's advertisements often arrive only via a non-connectable Bluetooth proxy, but the coordinator was registered with `connectable=True` and therefore ignored them, so entities only refreshed on the 30s poll (which does not re-read temperature). Changed the coordinator to `connectable=False` so it consumes all advertisements (full state lives in the manufacturer data); commands and polls still establish their own connectable link on demand. Verified: with `connectable=False`, `fan`/`temperature`/`humidity`/`vpd` track live advertisements.
+
+Made `fan` commands optimistic: `set_percentage`/`turn_on`/`turn_off` now write entity state immediately after the BLE command instead of waiting for the next advertisement/poll, so the card reflects the change instantly.
+
 1.0.5 (disruptivepatternmaterial)
 
 Renamed integration domain from `ac_infinity` to `ac_infinity_ble` (directory, manifest, const.DOMAIN). This lets the local-BLE integration coexist with the cloud `ac_infinity` integration (dalinicus) on the same Home Assistant instance, so controllers can be migrated from cloud to local one at a time.

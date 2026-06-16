@@ -37,7 +37,12 @@ class ACInfinityDataUpdateCoordinator(ActiveBluetoothDataUpdateCoordinator[None]
             needs_poll_method=self._needs_poll,
             poll_method=self._async_update,
             mode=bluetooth.BluetoothScanningMode.ACTIVE,
-            connectable=True,
+            # Listen to ALL advertisements, including non-connectable ones. The
+            # controller's full state (temp/hum/vpd/fan/fan_state) lives in the
+            # advertisement manufacturer data, so passive updates keep entities
+            # fresh even when the only nearby proxy is non-connectable. Commands
+            # and polls still establish their own connectable link on demand.
+            connectable=False,
         )
         self.ble_device = ble_device
         self.controller = controller

@@ -59,6 +59,20 @@ Verified on a Controller 69 Pro (choose_port = 1):
 - `fan.turn_off` -> advertised `fan_state -> 1`, `fan` -> the port's configured
   off-speed (not necessarily 0; `set_percentage 0` gives a true stop).
 
+## State updates (passive vs poll)
+
+- The coordinator registers with `connectable=False` so it receives **every**
+  advertisement (the controller's full state — temp/hum/vpd/fan/fan_state —
+  is in the manufacturer data). This matters because the controller is often
+  only heard via a non-connectable proxy; a `connectable=True` registration
+  ignored those and the UI froze between polls.
+- Commands (`set_speed`/`turn_on`/`turn_off`) and the 30s poll still need a
+  connectable link, established on demand via `bleak_retry_connector`.
+- `fan` on/off (`is_on`) derives from `work_type`, which is **not** in
+  advertisements (only set by commands and polls). So on/off is correct
+  immediately after a command (optimistic write) and refreshed each poll;
+  fan **speed/percentage** tracks every advertisement.
+
 ## Known limitations
 
 - **Single port per controller.** Each config entry exposes one fan and
