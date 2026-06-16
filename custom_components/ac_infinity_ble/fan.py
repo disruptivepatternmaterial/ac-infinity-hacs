@@ -66,7 +66,7 @@ class ACInfinityFan(
             name=device.name,
             model=DEVICE_MODEL[device.state.type],
             manufacturer="AC Infinity",
-            sw_version=device.state.version,
+            sw_version=str(device.state.version),
             connections={(dr.CONNECTION_BLUETOOTH, device.address)},
         )
         self._async_update_attrs()

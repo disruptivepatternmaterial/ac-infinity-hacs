@@ -2,6 +2,17 @@
 Custom Integration to test AC Infinity Controllers
 
 All credit to @hunterjm's integration https://github.com/hunterjm/ac-infinity-hacs to which this is a fork of.
+This fork is maintained at https://github.com/disruptivepatternmaterial/ac-infinity-hacs and is a fork of @way-lo's fork.
+
+See [SPEC.md](SPEC.md) for the current behavior, deployed state, and known limitations.
+
+1.0.5 (disruptivepatternmaterial)
+
+Renamed integration domain from `ac_infinity` to `ac_infinity_ble` (directory, manifest, const.DOMAIN). This lets the local-BLE integration coexist with the cloud `ac_infinity` integration (dalinicus) on the same Home Assistant instance, so controllers can be migrated from cloud to local one at a time.
+
+Added `controller.py` with `PortAwareController`, used in place of the upstream `ACInfinityController`. The upstream `ac-infinity-ble==0.4.3` library hardcodes the UIS port index to `0` in every command and read. On multi-port controllers (e.g. Controller 69 Pro) the fan is often on a different port, so commands were acknowledged by the controller but moved nothing. `PortAwareController` targets the controller's currently selected port (`choose_port`, populated from each advertisement). Verified live on a Controller 69 Pro: `fan.set_percentage` now changes the fan (0 -> 5, fan_state 0 -> 2) and `fan.turn_off` returns it to the configured off-speed. (See SPEC.md "Known limitations" for the single-port caveat.)
+
+Cast `sw_version` to `str` in fan.py and sensor.py device info (upstream passed an int, which Home Assistant warns will stop working in 2026.12.0).
 
 1.0.4
 
