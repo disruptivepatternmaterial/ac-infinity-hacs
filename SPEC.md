@@ -118,9 +118,16 @@ controller advertises `choose_port = 1`, and `get_model_data(type, 1, seq)`
 returns valid data while the cloud registry calls the same load "Port 1". The
 live map therefore uses indices 1/2/3.
 
-Verification:
-- ✅ Per-port reads succeed for all three ports (0 poll failures after the
-  per-port-reconnect change, 2026-06-15).
+Verification (live G-622UC, 2026-06-15, library logger at debug):
+- ✅ Each poll connects, reads one port, disconnects, then repeats — the
+  command byte (`ff <pp>`) cycles `ff01`, `ff02`, `ff03` and each gets a
+  `Notification received` with distinct body (port 1 `120104` vs port 2
+  `120109`). 0 poll failures.
+  ```
+  G-622UC: Sending command a5...1617ff01...  -> Notification ...120104...
+  G-622UC: Sending command a5...1617ff02...  -> Notification ...120109...
+  G-622UC: Sending command a5...1617ff03...  -> Notification ...120104...
+  ```
 - ✅ `light.turn_off` write to port 3 fires with no BLE error.
 - ⏳ Owner to confirm physical isolation: `fan.set_percentage` on each fan
   entity changes only that fan; `light.turn_on`/brightness changes only the
