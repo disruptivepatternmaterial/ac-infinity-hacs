@@ -92,7 +92,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._discovered_devices[discovery.address] = discovery
         else:
             current_addresses = self._async_current_ids()
-            for discovery in async_discovered_service_info(self.hass):
+            # connectable=False so controllers heard only via non-connectable
+            # proxies still appear in discovery. The connectable link needed for
+            # the test below / setup is established on demand by bleak_retry.
+            for discovery in async_discovered_service_info(self.hass, connectable=False):
                 if (
                     discovery.address in current_addresses
                     or discovery.address in self._discovered_devices

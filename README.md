@@ -6,6 +6,10 @@ This fork is maintained at https://github.com/disruptivepatternmaterial/ac-infin
 
 See [SPEC.md](SPEC.md) for the current behavior, deployed state, and known limitations.
 
+1.0.7 (disruptivepatternmaterial)
+
+Config flow now discovers with `connectable=False`. Controllers heard only via a non-connectable Bluetooth proxy were invisible to the add flow (`no_devices_found`) unless a brief connectable window happened to coincide; this makes them reliably listable. The connectable link for the connection test / setup is still established on demand.
+
 1.0.6 (disruptivepatternmaterial)
 
 Fixed the Home Assistant UI showing stale fan/sensor state. The controller's advertisements often arrive only via a non-connectable Bluetooth proxy, but the coordinator was registered with `connectable=True` and therefore ignored them, so entities only refreshed on the 30s poll (which does not re-read temperature). Changed the coordinator to `connectable=False` so it consumes all advertisements (full state lives in the manufacturer data); commands and polls still establish their own connectable link on demand. Verified: with `connectable=False`, `fan`/`temperature`/`humidity`/`vpd` track live advertisements.
