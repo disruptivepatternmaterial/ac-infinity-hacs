@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from ac_infinity_ble import ACInfinityController, CallbackType
 
+from .models import PortState
+
 
 class PortAwareController(ACInfinityController):
     """An ACInfinityController that addresses the selected UIS port."""
@@ -85,3 +87,60 @@ class PortAwareController(ACInfinityController):
         )
         await self._send_command(command)
         await self._execute_disconnect()
+
+
+class MultiPortController(PortAwareController):
+    """Controller that reads and writes each UIS port independently.
+
+    Used for controllers that drive several loads at once (e.g. the office
+    69 Pro: two fans + a grow light). The upstream library models a single
+    port in ``DeviceInfo``; this subclass keeps a per-port ``PortState`` cache
+    and addresses each port explicitly via the protocol's port argument, all
+    over a single shared BLE connection (the link is held open for
+    ``DISCONNECT_DELAY`` between commands).
+
+    NOTE: the BLE port index is assumed zero-based (cloud "Port N" -> index
+    N-1). This must be verified against the live controller before trusting it.
+    """
+
+    def __init__(self, *args, ports: list[int], **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._port_indices: list[int] = list(ports)
+        self.port_states: dict[int, PortState] = {p: PortState() for p in ports}
+
+    async def update(self) -> None:
+        """Read every configured port in one connected session."""
+        await self._ensure_connected()
+        try:
+            for port in self._port_indices:
+                command = self._protocol.get_model_data(
+                    self._state.type, port, self.sequence
+                )
+                if data := await self._send_command(command):
+                    self.port_states[port] = PortState(
+                        work_type=data[12],
+                        level_off=data[15],
+                        level_on=data[18],
+                    )
+            self._fire_callbacks(CallbackType.UPDATE_RESPONSE)
+        finally:
+            await self._execute_disconnect()
+
+    async def set_port_level(self, port: int, work_type: int, level: int) -> None:
+        """Set one port to a work_type (1=off, 2=on) and level (0-10)."""
+        await self._ensure_connected()
+        try:
+            command = self._protocol.set_level(
+                self._state.type, work_type, level, port, self.sequence
+            )
+            await self._send_command(command)
+            state = self.port_states.get(port) or PortState()
+            state.work_type = work_type
+            if work_type == 2:
+                state.level_on = level
+            else:
+                state.level_off = level
+            self.port_states[port] = state
+            self._fire_callbacks(CallbackType.UPDATE_RESPONSE)
+        finally:
+            await self._execute_disconnect()

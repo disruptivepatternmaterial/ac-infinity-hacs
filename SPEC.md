@@ -37,9 +37,16 @@ Controller 69 Pro, 6 = Airtap T4. Device type comes from BLE manufacturer data
 
 ## Entities (per config entry / controller)
 
+Single-port (default, no port map configured):
 - `fan.<name>_fan` — speed 1–10 mapped to 0–100%, plus on/off.
 - `sensor.<name>_temperature`, `sensor.<name>_humidity`.
 - `sensor.<name>_vpd` — only when `state.version >= 3` and type in {7,9,11,12}.
+
+Multi-port (when the entry carries a port map — see "Multi-port control"):
+- one `fan.<port name>` per `kind: fan` port, bound to a fixed port index.
+- one `light.<port name>` per `kind: light` port (brightness = level 1–10
+  scaled onto 0–255).
+- the same controller-level temp/humidity/vpd sensors.
 
 ## Port addressing (the important fix)
 
@@ -73,18 +80,57 @@ Verified on a Controller 69 Pro (choose_port = 1):
   immediately after a command (optimistic write) and refreshed each poll;
   fan **speed/percentage** tracks every advertisement.
 
+## Multi-port control (office: 2 fans + grow light)
+
+Implemented in code, **🚧 NOT YET VERIFIED on the live office controller** —
+the office 69 Pro is still on Wi-Fi/cloud and cannot advertise BLE until it is
+switched to Bluetooth mode (see hardware prerequisite). The verification steps
+below MUST pass before this is trusted.
+
+Design:
+- A config entry gains per-port behaviour when its `data`/`options` carries a
+  `ports` list (`const.CONF_PORTS`), e.g.:
+  ```json
+  "ports": [
+    {"port": 0, "kind": "fan",   "name": "Office Fan Port 1"},
+    {"port": 1, "kind": "fan",   "name": "Office Fan Port 2"},
+    {"port": 2, "kind": "light", "name": "Bathroom Grow Light"}
+  ]
+  ```
+- `controller.py::MultiPortController` keeps a `port_states: dict[int,
+  PortState]` and reads every configured port in one connected session
+  (`get_model_data(type, port, seq)` per port; the link stays open for
+  `DISCONNECT_DELAY`). Writes go to a single port via
+  `set_port_level(port, work_type, level)`.
+- `fan.py::ACInfinityPortFan` and `light.py::ACInfinityGrowLight` each bind to
+  a fixed port index (not `choose_port`). `__init__.py` selects
+  `MultiPortController` + the FAN/LIGHT/SENSOR platforms when a port map exists.
+
+Office port map (read from the live cloud device registry, controller id
+`1424979258063479287`): Port 1 = Office Fan Port 1, Port 2 = Office Fan Port 2,
+Port 3 = Bathroom Grow Light, Port 4 = unused.
+
+**Unverified assumption:** BLE port index is zero-based (cloud "Port N" -> BLE
+index N-1), so the map above uses indices 0/1/2. This base MUST be confirmed by
+probing the live controller (set port 0 and observe which physical load moves)
+before relying on it; if it is one-based, shift every `port` by +1.
+
+Verification (run once office is in BLE mode):
+- Probe each port: `get_model_data(type, b, seq)` for b in 0..3, confirm which
+  index moves which physical load; fix the port map accordingly.
+- `fan.set_percentage` on each fan entity changes only that fan.
+- `light.turn_on`/brightness on the light entity changes only the light.
+- The grow-light on-device sunrise/sunset schedule is lost in BLE; it is driven
+  from the Node-RED "Plant Light" flow against the new `light.*` entity.
+
 ## Known limitations
 
-- **Single port per controller.** Each config entry exposes one fan and
-  targets the controller's *selected* port. Controllers driving multiple
-  devices (e.g. an Office controller with two fans and a grow light) are **not
-  fully supported**: there is no per-port fan entity and no light entity yet.
-  Migrating such a controller off cloud would lose independent control of the
-  other ports. 🚧 NOT YET IMPLEMENTED: multi-port entities (per-port fan +
-  light). Track in this fork's issues before relying on it.
-- The selected-port approach assumes the controller display stays on the fan's
-  port. If the physical port selection is changed on the controller, commands
-  follow it. An explicit per-entry port option is not yet implemented.
+- The single-port (default) path targets the controller's *selected* port
+  (`choose_port`); if the physical port selection is changed on the controller,
+  commands follow it. Multi-port entries pin explicit indices and do not have
+  this issue.
+- Multi-port light scheduling depends on Node-RED/HA (the controller's
+  on-device schedule does not run while in BLE mode).
 
 ## Verification commands
 

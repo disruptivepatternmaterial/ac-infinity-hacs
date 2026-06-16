@@ -22,9 +22,10 @@ from homeassistant.util.percentage import (
     percentage_to_ranged_value,
 )
 
-from .const import DEVICE_MODEL, DOMAIN
+from .const import DEVICE_MODEL, DOMAIN, PORT_KIND_FAN
+from .controller import MultiPortController
 from .coordinator import ACInfinityDataUpdateCoordinator
-from .models import ACInfinityData
+from .models import ACInfinityData, PortConfig
 
 SPEED_RANGE = (1, 10)
 
@@ -34,8 +35,15 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the light platform for LEDBLE."""
+    """Set up the AC Infinity fan platform."""
     data: ACInfinityData = hass.data[DOMAIN][entry.entry_id]
+    if data.ports:
+        async_add_entities(
+            ACInfinityPortFan(data.coordinator, data.device, entry.title, port)
+            for port in data.ports
+            if port.kind == PORT_KIND_FAN
+        )
+        return
     async_add_entities([ACInfinityFan(data.coordinator, data.device, entry.title)])
 
 
@@ -110,6 +118,99 @@ class ACInfinityFan(
             ranged_value_to_percentage(SPEED_RANGE, fan_speed)
             if fan_speed is not None and fan_speed > 0
             else 0
+        )
+
+    @callback
+    def _handle_coordinator_update(self, *args: Any) -> None:
+        """Handle data update."""
+        self._async_update_attrs()
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        """Register callbacks."""
+        self.async_on_remove(
+            self._device.register_callback(self._handle_coordinator_update)
+        )
+        return await super().async_added_to_hass()
+
+
+class ACInfinityPortFan(
+    PassiveBluetoothCoordinatorEntity[ACInfinityDataUpdateCoordinator], FanEntity
+):
+    """A fan bound to a fixed UIS port on a multi-port controller."""
+
+    _attr_speed_count = int_states_in_range(SPEED_RANGE)
+    _attr_supported_features = (
+        FanEntityFeature.SET_SPEED
+        | FanEntityFeature.TURN_ON
+        | FanEntityFeature.TURN_OFF
+    )
+
+    def __init__(
+        self,
+        coordinator: ACInfinityDataUpdateCoordinator,
+        device: MultiPortController,
+        name: str,
+        port: PortConfig,
+    ) -> None:
+        """Initialize a per-port AC Infinity fan."""
+        super().__init__(coordinator)
+        self._device = device
+        self._port = port.port
+        self._attr_name = port.name
+        self._attr_unique_id = f"{device.address}_port{port.port}_fan"
+        self._attr_device_info = DeviceInfo(
+            name=device.name,
+            model=DEVICE_MODEL.get(device.state.type),
+            manufacturer="AC Infinity",
+            sw_version=str(device.state.version),
+            connections={(dr.CONNECTION_BLUETOOTH, device.address)},
+        )
+        self._async_update_attrs()
+
+    def _port_state(self):
+        return self._device.port_states.get(self._port)
+
+    async def async_set_percentage(self, percentage: int) -> None:
+        """Set the speed of this port, as a percentage."""
+        if percentage <= 0:
+            await self._device.set_port_level(self._port, 1, 0)
+        else:
+            speed = math.ceil(percentage_to_ranged_value(SPEED_RANGE, percentage))
+            await self._device.set_port_level(self._port, 2, speed)
+        self._async_update_attrs()
+        self.async_write_ha_state()
+
+    async def async_turn_on(
+        self,
+        percentage: int | None = None,
+        preset_mode: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """Turn on this port."""
+        if percentage is not None and percentage > 0:
+            speed = math.ceil(percentage_to_ranged_value(SPEED_RANGE, percentage))
+        else:
+            state = self._port_state()
+            speed = (state.level_on if state else None) or 10
+        await self._device.set_port_level(self._port, 2, speed)
+        self._async_update_attrs()
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Turn off this port."""
+        await self._device.set_port_level(self._port, 1, 0)
+        self._async_update_attrs()
+        self.async_write_ha_state()
+
+    @callback
+    def _async_update_attrs(self) -> None:
+        """Handle updating _attr values."""
+        state = self._port_state()
+        self._attr_is_on = bool(state and state.is_on)
+        level = state.level if state else 0
+        self._attr_percentage = (
+            ranged_value_to_percentage(SPEED_RANGE, level) if level > 0 else 0
         )
 
     @callback

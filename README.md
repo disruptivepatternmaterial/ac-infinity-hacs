@@ -6,6 +6,12 @@ This fork is maintained at https://github.com/disruptivepatternmaterial/ac-infin
 
 See [SPEC.md](SPEC.md) for the current behavior, deployed state, and known limitations.
 
+1.1.0 (disruptivepatternmaterial)
+
+Added multi-port control for controllers driving several loads at once (the office 69 Pro: two fans + a grow light). When a config entry carries a `ports` map (`const.CONF_PORTS`), the integration uses `controller.MultiPortController` (per-port state cache, reads every configured port in one connected BLE session, writes a single port via `set_port_level`) and creates one `fan` per `kind: fan` port plus one `light` per `kind: light` port (`light.py`), each bound to a fixed port index instead of `choose_port`. Without a port map the single-port behaviour is unchanged.
+
+🚧 NOT YET VERIFIED on the live office controller: the office is still on Wi-Fi/cloud and cannot advertise BLE until switched to Bluetooth mode. The BLE port index is assumed zero-based (cloud "Port N" -> index N-1); this and per-port isolation must be probed on the live device before relying on it. See SPEC.md "Multi-port control".
+
 1.0.7 (disruptivepatternmaterial)
 
 Config flow now discovers with `connectable=False`. Controllers heard only via a non-connectable Bluetooth proxy were invisible to the add flow (`no_devices_found`) unless a brief connectable window happened to coincide; this makes them reliably listable. The connectable link for the connection test / setup is still established on demand.
