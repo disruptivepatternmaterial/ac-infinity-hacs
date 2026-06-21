@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+from datetime import UTC, datetime
 
 from ac_infinity_ble import ACInfinityController
 import async_timeout
@@ -14,6 +15,9 @@ from homeassistant.components.bluetooth.active_update_coordinator import (
     ActiveBluetoothDataUpdateCoordinator,
 )
 from homeassistant.core import CoreState, HomeAssistant, callback
+
+from .ble_manager import ACInfinityBLEManager
+from .const import DEFAULT_POLL_INTERVAL_SECONDS
 
 
 DEVICE_STARTUP_TIMEOUT = 30
@@ -28,6 +32,10 @@ class ACInfinityDataUpdateCoordinator(ActiveBluetoothDataUpdateCoordinator[None]
         logger: logging.Logger,
         ble_device: BLEDevice,
         controller: ACInfinityController,
+        ble_manager: ACInfinityBLEManager,
+        *,
+        poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS,
+        passive_only: bool = False,
     ) -> None:
         """Initialize global switchbot data updater."""
         super().__init__(
@@ -46,6 +54,9 @@ class ACInfinityDataUpdateCoordinator(ActiveBluetoothDataUpdateCoordinator[None]
         )
         self.ble_device = ble_device
         self.controller = controller
+        self.ble_manager = ble_manager
+        self.poll_interval_seconds = max(1, poll_interval_seconds)
+        self.passive_only = passive_only
         self._ready_event = asyncio.Event()
         self._was_unavailable = True
 
@@ -55,23 +66,44 @@ class ACInfinityDataUpdateCoordinator(ActiveBluetoothDataUpdateCoordinator[None]
         service_info: bluetooth.BluetoothServiceInfoBleak,
         seconds_since_last_poll: float | None,
     ) -> bool:
-        # Only poll if hass is running, we need to poll,
-        # and we actually have a way to connect to the device
-        return (
-            self.hass.state == CoreState.running
-            and (seconds_since_last_poll is None or seconds_since_last_poll > 30)
-            and bool(
-                bluetooth.async_ble_device_from_address(
-                    self.hass, service_info.device.address, connectable=True
-                )
+        # Passive-first polling: only connect when the device has gone stale/unavailable.
+        if self.hass.state != CoreState.running:
+            return False
+        if self.passive_only:
+            return False
+        connectable_ble_device = bluetooth.async_ble_device_from_address(
+            self.hass, service_info.device.address, connectable=True
+        )
+        if not bool(connectable_ble_device):
+            return False
+        if self._was_unavailable:
+            return self.ble_manager.should_poll_now(
+                service_info.device.address,
+                seconds_since_last_poll=seconds_since_last_poll,
+                poll_interval_seconds=self.poll_interval_seconds,
             )
+        stats = self.ble_manager.stats(service_info.device.address)
+        if stats.last_seen is not None:
+            age = (datetime.now(UTC) - stats.last_seen).total_seconds()
+            if age < self.poll_interval_seconds:
+                return False
+        return self.ble_manager.should_poll_now(
+            service_info.device.address,
+            seconds_since_last_poll=seconds_since_last_poll,
+            poll_interval_seconds=self.poll_interval_seconds,
         )
 
     async def _async_update(
         self, service_info: bluetooth.BluetoothServiceInfoBleak
     ) -> None:
         """Poll the device."""
-        await self.controller.update()
+        try:
+            await self.controller.update()
+        except Exception as err:
+            self.ble_manager.note_poll_failure(service_info.device.address, err)
+            raise
+        else:
+            self.ble_manager.note_poll_success(service_info.device.address)
 
     @callback
     def _async_handle_unavailable(
@@ -92,6 +124,7 @@ class ACInfinityDataUpdateCoordinator(ActiveBluetoothDataUpdateCoordinator[None]
         self.controller.set_ble_device_and_advertisement_data(
             service_info.device, service_info.advertisement
         )
+        self.ble_manager.note_advertisement(service_info.device.address, service_info.rssi)
         if self.controller.name:
             self._ready_event.set()
         self.logger.debug(

@@ -15,5 +15,19 @@
                 "description": "Do you want to start setup?"
             }
         }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "BLE behavior",
+                "description": "Tune polling and BLE command behavior for this controller.",
+                "data": {
+                    "poll_interval_seconds": "Poll interval (seconds)",
+                    "passive_only": "Passive only (disable active polls)",
+                    "min_connect_gap_seconds": "Minimum connect gap (seconds)",
+                    "command_retry_count": "Command retry count"
+                }
+            }
+        }
     }
 }

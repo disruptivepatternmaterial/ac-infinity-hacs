@@ -18,6 +18,7 @@ from homeassistant.const import CONF_ADDRESS, CONF_SERVICE_DATA
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import BLEAK_EXCEPTIONS, DOMAIN
+from .options_flow import ACInfinityOptionsFlow
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -126,3 +127,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=data_schema,
             errors=errors,
         )
+
+    @staticmethod
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Get options flow for this handler."""
+        return ACInfinityOptionsFlow(config_entry)
