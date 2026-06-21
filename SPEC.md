@@ -181,3 +181,17 @@ Verification (live G-622UC, 2026-06-15, library logger at debug):
 - Command port byte: set `ac_infinity_ble` logger to debug and read the
   `Sending command ...` hex line; the trailing `ff <pp>` is `ff` + port index.
 
+## Operations (verified 2026-06-21)
+
+These commands were run against the live BowmanMtn host and are safe to re-run.
+
+- Baseline + scanner snapshot: run the command block recorded in `ops/acinf-ble-baseline-20260621.txt`.
+- LR/Family visibility check:
+  `ssh bowmanmtn "python3 -c \"import json; rs=json.load(open('/home/ntableman/docker/ha/config/.storage/bluetooth.remote_scanners'))['data']; targets=['80:65:99:AB:00:3E','3C:84:27:2D:BF:F6']; print({t:any(t in s.get('discovered_device_advertisement_datas',{}) for s in rs.values()) for t in targets})\""`
+- Registry hygiene check:
+  `ssh bowmanmtn "python3 -c \"import json; er=json.load(open('/home/ntableman/docker/ha/config/.storage/core.entity_registry'))['data']['entities']; orph=[e for e in er if e.get('platform')=='ac_infinity_ble' and not e.get('config_entry_id')]; cloud=[e for e in er if e.get('platform')=='ac_infinity']; print('orphan_ble',len(orph)); print('cloud_acinfinity',len(cloud))\""`
+
+Physical recovery notes (current blockers):
+- LR `80:65:99:AB:00:3E` is not advertising on any scanner, so HA re-adopt cannot proceed yet.
+- Family `3C:84:27:2D:BF:F6` has a config entry/entity but is not advertising, so commands will stay unavailable until advertising resumes.
+
