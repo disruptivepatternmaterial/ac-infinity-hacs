@@ -6,6 +6,31 @@ on 2026-06-15. Where something is not yet implemented it is called out under
 "Known limitations". Do not add claims here that are not verified on a real
 device.
 
+## 2026-06-21 code updates (repo verification)
+
+The following behaviors were added in this repository on 2026-06-21 and are
+verified at code level only (not yet production-verified):
+
+- `ble_manager.py` now provides a global BLE lock with configurable
+  `min_connect_gap_seconds` (default `3`) and deterministic stagger offsets for
+  first active poll scheduling.
+- Active polling is passive-first: coordinator polls only when advertisements
+  are stale/unavailable, controlled by `poll_interval_seconds` (default `120`)
+  and `passive_only`.
+- Multi-port controllers now poll one port per active poll cycle in
+  round-robin order.
+- Options flow now exposes `poll_interval_seconds`, `passive_only`,
+  `min_connect_gap_seconds`, and `command_retry_count`.
+- New diagnostic sensors are added per controller:
+  `ble_last_rssi`, `ble_last_seen`, `ble_last_error`, `ble_poll_failures`.
+- Setup now restores entities from cached `CONF_SERVICE_DATA` when device is
+  not connectable at boot, then hydrates on later advertisements.
+- Fan/light duplicate writes to the same target state are coalesced for 5s.
+
+Verification notes (executed in repo):
+- `python3 -m compileall custom_components/ac_infinity_ble` -> pass
+- `python3 -m pytest` -> no tests collected
+
 ## Purpose
 
 Local Bluetooth (BLE) control of AC Infinity UIS controllers from Home
@@ -155,3 +180,4 @@ Verification (live G-622UC, 2026-06-15, library logger at debug):
   `fan`, `fan_state`, `choose_port`.
 - Command port byte: set `ac_infinity_ble` logger to debug and read the
   `Sending command ...` hex line; the trailing `ff <pp>` is `ff` + port index.
+

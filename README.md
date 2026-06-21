@@ -6,6 +6,20 @@ This fork is maintained at https://github.com/disruptivepatternmaterial/ac-infin
 
 See [SPEC.md](SPEC.md) for the current behavior, deployed state, and known limitations.
 
+1.2.0 (disruptivepatternmaterial)
+
+Added phased BLE management updates in `ac_infinity_ble`:
+- global BLE session manager (`ble_manager.py`) with one house-level lock, configurable minimum connect gap (`min_connect_gap_seconds`, default `3`), and deterministic staggered initial poll offsets.
+- passive-first polling with configurable `poll_interval_seconds` (default `120`), `passive_only`, and office multi-port round-robin polling (one port per poll cycle).
+- options flow (`options_flow.py`) exposing `poll_interval_seconds`, `passive_only`, `min_connect_gap_seconds`, and `command_retry_count`.
+- diagnostic sensors: `ble_last_rssi`, `ble_last_seen`, `ble_last_error`, `ble_poll_failures`.
+- resilient setup path: entries/platforms restore from cached `CONF_SERVICE_DATA` even when the controller is not connectable at boot, then refresh on later advertisements.
+- write coalescing for fan/light commands: duplicate writes with identical target state within `5s` are skipped.
+
+Verification notes for this release (repository-only):
+- `python3 -m compileall custom_components/ac_infinity_ble` (pass)
+- `python3 -m pytest` (runs, no tests collected in this repository)
+
 1.1.0 (disruptivepatternmaterial)
 
 Added multi-port control for controllers driving several loads at once (the office 69 Pro: two fans + a grow light). When a config entry carries a `ports` map (`const.CONF_PORTS`), the integration uses `controller.MultiPortController` (per-port state cache, reads every configured port in one connected BLE session, writes a single port via `set_port_level`) and creates one `fan` per `kind: fan` port plus one `light` per `kind: light` port (`light.py`), each bound to a fixed port index instead of `choose_port`. Without a port map the single-port behaviour is unchanged.
