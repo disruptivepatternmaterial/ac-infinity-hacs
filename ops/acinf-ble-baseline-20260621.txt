@@ -1,0 +1,53 @@
+AC Infinity BLE baseline - 2026-06-21
+Source host: BowmanMtn
+Capture time (local): 2026-06-21 13:52 PDT
+
+Verification command:
+ssh bowmanmtn "python3 - <<'PY'
+import json,glob,re
+base='/home/ntableman/docker/ha/config'
+pat=re.compile(r'GATT Error|Failure while polling|unexpectedly disconnected')
+count=0
+for p in glob.glob(base+'/home-assistant.log*'):
+    with open(p,errors='ignore') as f:
+        for line in f:
+            if pat.search(line):
+                count+=1
+print('ERROR_COUNT',count)
+ce=json.load(open(base+'/.storage/core.config_entries'))['data']['entries']
+entries=[e for e in ce if e.get('domain')=='ac_infinity_ble']
+print('ENTRIES',[(e.get('title'),e.get('entry_id')) for e in entries])
+er=json.load(open(base+'/.storage/core.entity_registry'))['data']['entities']
+fans=[e['entity_id'] for e in er if e.get('platform')=='ac_infinity_ble' and e.get('entity_id','').startswith('fan.')]
+print('FANS',sorted(fans))
+rs=json.load(open(base+'/.storage/bluetooth.remote_scanners'))['data']
+targets=['80:65:99:AB:00:3E','3C:84:27:2D:BF:F6','3C:84:27:2D:99:7A','48:CA:43:81:9F:E6']
+for addr in targets:
+    seen=[]
+    for scanner_mac,info in rs.items():
+        ad=info.get('discovered_device_advertisement_datas',{}).get(addr)
+        if ad:
+            rssi=ad.get('advertisement_data',{}).get('rssi')
+            seen.append((scanner_mac,rssi))
+    print('RSSI',addr,seen)
+orph=[e for e in er if e.get('platform')=='ac_infinity_ble' and not e.get('config_entry_id')]
+print('ORPHAN_BLE',len(orph))
+cloud=[e['entity_id'] for e in er if e.get('platform')=='ac_infinity' and 'ac_infinity' in e.get('entity_id','')]
+print('CLOUD_ENTITIES',len(cloud),sorted(cloud)[:30])
+PY"
+
+Captured metrics:
+ERROR_COUNT 429
+ENTRIES [('G-Q7R1J', '01KV6ZJJS3FC61KR5MB4VHVG8V'), ('G-SGR1J', '01KV759Q8EWTGDSVBZC80PSASS'), ('G-622UC', '01KV7B47HC2067STGMBJ0MFKW5')]
+FANS ['fan.family_room_ac_infinity_fan', 'fan.library_ac_infinity_fan', 'fan.office_ac_infinity_fan_1', 'fan.office_ac_infinity_fan_2']
+RSSI 80:65:99:AB:00:3E []
+RSSI 3C:84:27:2D:BF:F6 []
+RSSI 3C:84:27:2D:99:7A [('A0:85:E3:B7:B0:62', -87), ('24:4C:AB:04:6B:02', -96), ('54:32:04:3F:1E:FA', -99), ('28:A0:6B:E9:A1:1E', -87), ('24:4C:AB:04:33:AA', -87), ('E4:B0:63:E6:B5:2E', -96), ('B0:A7:32:40:C2:B6', -82), ('54:32:04:3F:2E:5A', -91), ('EC:C9:FF:4D:14:B6', -90), ('B0:A7:32:40:B6:42', -85)]
+RSSI 48:CA:43:81:9F:E6 [('A0:85:E3:B7:B0:62', -73), ('24:4C:AB:04:6B:02', -65), ('28:A0:6B:E9:A1:1E', -78), ('24:4C:AB:04:33:AA', -91), ('E4:B0:63:E6:B5:2E', -95), ('B0:A7:32:40:C2:B6', -66), ('54:32:04:3F:2E:5A', -85), ('EC:C9:FF:4D:14:B6', -91), ('B0:A7:32:40:B6:42', -73)]
+ORPHAN_BLE 0
+CLOUD_ENTITIES 0 []
+
+Phase implications:
+- LR controller (80:65:99:AB:00:3E) is not visible and has no config entry/fan.
+- Family controller (3C:84:27:2D:BF:F6) has config entry/fan but is not visible in scanner cache.
+- Library and Office are visible; office strongest scanner is 24:4C:AB:04:6B:02 at -65 dBm.
