@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+from time import monotonic
 from typing import Any
 
 from ac_infinity_ble import ACInfinityController
@@ -22,7 +23,7 @@ from homeassistant.util.percentage import (
     percentage_to_ranged_value,
 )
 
-from .const import DEVICE_MODEL, DOMAIN, PORT_KIND_FAN
+from .const import DEVICE_MODEL, DOMAIN, PORT_KIND_FAN, WRITE_COALESCE_SECONDS
 from .controller import MultiPortController
 from .coordinator import ACInfinityDataUpdateCoordinator
 from .models import ACInfinityData, PortConfig
@@ -78,7 +79,20 @@ class ACInfinityFan(
             sw_version=str(device.state.version),
             connections={(dr.CONNECTION_BLUETOOTH, device.address)},
         )
+        self._last_write_speed: int | None = None
+        self._last_write_at = 0.0
         self._async_update_attrs()
+
+    def _should_skip_duplicate_write(self, speed: int) -> bool:
+        now = monotonic()
+        if (
+            self._last_write_speed == speed
+            and now - self._last_write_at <= WRITE_COALESCE_SECONDS
+        ):
+            return True
+        self._last_write_speed = speed
+        self._last_write_at = now
+        return False
 
     async def async_set_percentage(self, percentage: int) -> None:
         """Set the speed of the fan, as a percentage."""
@@ -86,6 +100,8 @@ class ACInfinityFan(
         if percentage > 0:
             speed = math.ceil(percentage_to_ranged_value(SPEED_RANGE, percentage))
 
+        if self._should_skip_duplicate_write(speed):
+            return
         await self._device.set_speed(speed)
         self._async_update_attrs()
         self.async_write_ha_state()
@@ -100,12 +116,16 @@ class ACInfinityFan(
         speed = None
         if percentage is not None:
             speed = math.ceil(percentage_to_ranged_value(SPEED_RANGE, percentage))
+            if self._should_skip_duplicate_write(speed):
+                return
         await self._device.turn_on(speed)
         self._async_update_attrs()
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the fan."""
+        if self._should_skip_duplicate_write(0):
+            return
         await self._device.turn_off()
         self._async_update_attrs()
         self.async_write_ha_state()
@@ -168,17 +188,35 @@ class ACInfinityPortFan(
             sw_version=str(device.state.version),
             connections={(dr.CONNECTION_BLUETOOTH, device.address)},
         )
+        self._last_write_signature: tuple[int, int] | None = None
+        self._last_write_at = 0.0
         self._async_update_attrs()
 
     def _port_state(self):
         return self._device.port_states.get(self._port)
 
+    def _should_skip_duplicate_write(self, work_type: int, level: int) -> bool:
+        now = monotonic()
+        signature = (work_type, level)
+        if (
+            self._last_write_signature == signature
+            and now - self._last_write_at <= WRITE_COALESCE_SECONDS
+        ):
+            return True
+        self._last_write_signature = signature
+        self._last_write_at = now
+        return False
+
     async def async_set_percentage(self, percentage: int) -> None:
         """Set the speed of this port, as a percentage."""
         if percentage <= 0:
+            if self._should_skip_duplicate_write(1, 0):
+                return
             await self._device.set_port_level(self._port, 1, 0)
         else:
             speed = math.ceil(percentage_to_ranged_value(SPEED_RANGE, percentage))
+            if self._should_skip_duplicate_write(2, speed):
+                return
             await self._device.set_port_level(self._port, 2, speed)
         self._async_update_attrs()
         self.async_write_ha_state()
@@ -195,12 +233,16 @@ class ACInfinityPortFan(
         else:
             state = self._port_state()
             speed = (state.level_on if state else None) or 10
+        if self._should_skip_duplicate_write(2, speed):
+            return
         await self._device.set_port_level(self._port, 2, speed)
         self._async_update_attrs()
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off this port."""
+        if self._should_skip_duplicate_write(1, 0):
+            return
         await self._device.set_port_level(self._port, 1, 0)
         self._async_update_attrs()
         self.async_write_ha_state()

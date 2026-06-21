@@ -14,10 +14,11 @@ from homeassistant.components.bluetooth.passive_update_coordinator import (
     PassiveBluetoothCoordinatorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfPressure, UnitOfTemperature
+from homeassistant.const import PERCENTAGE, SIGNAL_STRENGTH_DECIBELS_MILLIWATT
+from homeassistant.const import UnitOfPressure, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DEVICE_MODEL, DOMAIN
@@ -35,6 +36,10 @@ async def async_setup_entry(
     entities = [
         TemperatureSensor(data.coordinator, data.device, entry.title),
         HumiditySensor(data.coordinator, data.device, entry.title),
+        BLELastRSSISensor(data.coordinator, data.device, entry.title),
+        BLELastSeenSensor(data.coordinator, data.device, entry.title),
+        BLELastErrorSensor(data.coordinator, data.device, entry.title),
+        BLEPollFailuresSensor(data.coordinator, data.device, entry.title),
     ]
     if data.device.state.version >= 3 and data.device.state.type in [7, 9, 11, 12]:
         entities.append(VpdSensor(data.coordinator, data.device, entry.title))
@@ -135,3 +140,70 @@ class VpdSensor(ACInfinitySensor):
     def _async_update_attrs(self) -> None:
         """Handle updating _attr values."""
         self._attr_native_value = self._device.vpd
+
+
+class BLELastRSSISensor(ACInfinitySensor):
+    _attr_name = "BLE Last RSSI"
+    _attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:bluetooth"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self._device.address}_ble_last_rssi"
+
+    @callback
+    def _async_update_attrs(self) -> None:
+        self._attr_native_value = self.coordinator.ble_manager.stats(
+            self._device.address
+        ).last_rssi
+
+
+class BLELastSeenSensor(ACInfinitySensor):
+    _attr_name = "BLE Last Seen"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:clock-outline"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self._device.address}_ble_last_seen"
+
+    @callback
+    def _async_update_attrs(self) -> None:
+        last_seen = self.coordinator.ble_manager.stats(self._device.address).last_seen
+        self._attr_native_value = last_seen
+
+
+class BLELastErrorSensor(ACInfinitySensor):
+    _attr_name = "BLE Last Error"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:alert-circle-outline"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self._device.address}_ble_last_error"
+
+    @callback
+    def _async_update_attrs(self) -> None:
+        self._attr_native_value = self.coordinator.ble_manager.stats(
+            self._device.address
+        ).last_error
+
+
+class BLEPollFailuresSensor(ACInfinitySensor):
+    _attr_name = "BLE Poll Failures"
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:counter"
+
+    @property
+    def unique_id(self) -> str:
+        return f"{self._device.address}_ble_poll_failures"
+
+    @callback
+    def _async_update_attrs(self) -> None:
+        self._attr_native_value = self.coordinator.ble_manager.stats(
+            self._device.address
+        ).poll_failures

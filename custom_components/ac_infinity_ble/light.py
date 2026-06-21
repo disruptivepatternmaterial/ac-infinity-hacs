@@ -8,6 +8,7 @@ light, scaling the 0-10 device level onto Home Assistant's 0-255 brightness.
 from __future__ import annotations
 
 import math
+from time import monotonic
 from typing import Any
 
 from homeassistant.components.bluetooth.passive_update_coordinator import (
@@ -25,6 +26,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DEVICE_MODEL, DOMAIN, PORT_KIND_LIGHT, PORT_LEVEL_MAX
+from .const import WRITE_COALESCE_SECONDS
 from .controller import MultiPortController
 from .coordinator import ACInfinityDataUpdateCoordinator
 from .models import ACInfinityData, PortConfig
@@ -81,10 +83,24 @@ class ACInfinityGrowLight(
             sw_version=str(device.state.version),
             connections={(dr.CONNECTION_BLUETOOTH, device.address)},
         )
+        self._last_write_signature: tuple[int, int] | None = None
+        self._last_write_at = 0.0
         self._async_update_attrs()
 
     def _port_state(self):
         return self._device.port_states.get(self._port)
+
+    def _should_skip_duplicate_write(self, work_type: int, level: int) -> bool:
+        now = monotonic()
+        signature = (work_type, level)
+        if (
+            self._last_write_signature == signature
+            and now - self._last_write_at <= WRITE_COALESCE_SECONDS
+        ):
+            return True
+        self._last_write_signature = signature
+        self._last_write_at = now
+        return False
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the grow light, optionally at a brightness."""
@@ -93,12 +109,16 @@ class ACInfinityGrowLight(
         else:
             state = self._port_state()
             level = (state.level_on if state else None) or PORT_LEVEL_MAX
+        if self._should_skip_duplicate_write(2, level):
+            return
         await self._device.set_port_level(self._port, 2, level)
         self._async_update_attrs()
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the grow light."""
+        if self._should_skip_duplicate_write(1, 0):
+            return
         await self._device.set_port_level(self._port, 1, 0)
         self._async_update_attrs()
         self.async_write_ha_state()
