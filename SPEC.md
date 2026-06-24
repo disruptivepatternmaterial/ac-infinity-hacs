@@ -6,6 +6,14 @@ on 2026-06-15. Where something is not yet implemented it is called out under
 "Known limitations". Do not add claims here that are not verified on a real
 device.
 
+## 2026-06-24 updates (v1.2.1+)
+
+- **Sensor data fidelity:** `sensor.py` reads `device.state.tmp/hum/vpd` directly instead of
+  upstream properties (`temperature`/`humidity`/`vpd`) that use `or 0` when the field is
+  `None`. Missing readings report as `unknown` in Home Assistant.
+- **Tests:** `tests/test_sensor.py` — 12 pytest cases (see README).
+- **HACS name:** AC Infinity BLE (NET Fork); manifest version tracks GitHub releases.
+
 ## 2026-06-21 code updates (repo verification)
 
 The following behaviors were added in this repository on 2026-06-21 and are
@@ -28,8 +36,8 @@ verified at code level only (not yet production-verified):
 - Fan/light duplicate writes to the same target state are coalesced for 5s.
 
 Verification notes (executed in repo):
+- `python3 -m pytest tests/` -> 12 passed (sensor null passthrough)
 - `python3 -m compileall custom_components/ac_infinity_ble` -> pass
-- `python3 -m pytest` -> no tests collected
 
 ## Purpose
 

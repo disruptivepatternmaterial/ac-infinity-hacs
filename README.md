@@ -1,64 +1,134 @@
-# ac-infinity-hacs
-Custom Integration to test AC Infinity Controllers
+# AC Infinity BLE (NET Fork)
 
-All credit to @hunterjm's integration https://github.com/hunterjm/ac-infinity-hacs to which this is a fork of.
-This fork is maintained at https://github.com/disruptivepatternmaterial/ac-infinity-hacs and is a fork of @way-lo's fork.
+Local Bluetooth (BLE) control of AC Infinity UIS fan controllers in Home Assistant — no cloud dependency.
 
-See [SPEC.md](SPEC.md) for the current behavior, deployed state, and known limitations.
+**This repo:** [disruptivepatternmaterial/ac-infinity-hacs](https://github.com/disruptivepatternmaterial/ac-infinity-hacs)  
+**Current release:** [v1.2.2](https://github.com/disruptivepatternmaterial/ac-infinity-hacs/releases/tag/v1.2.2)  
+**HACS name:** `AC Infinity BLE (NET Fork)`  
+**Integration domain:** `ac_infinity_ble` (coexists with cloud `ac_infinity` / dalinicus)
 
-1.2.0 (disruptivepatternmaterial)
+Fork lineage: [@hunterjm/ac-infinity-hacs](https://github.com/hunterjm/ac-infinity-hacs) → [@way-lo/ac-infinity-hacs](https://github.com/way-lo/ac-infinity-hacs) → this fork.
 
-Added phased BLE management updates in `ac_infinity_ble`:
-- global BLE session manager (`ble_manager.py`) with one house-level lock, configurable minimum connect gap (`min_connect_gap_seconds`, default `3`), and deterministic staggered initial poll offsets.
-- passive-first polling with configurable `poll_interval_seconds` (default `120`), `passive_only`, and office multi-port round-robin polling (one port per poll cycle).
-- options flow (`options_flow.py`) exposing `poll_interval_seconds`, `passive_only`, `min_connect_gap_seconds`, and `command_retry_count`.
-- diagnostic sensors: `ble_last_rssi`, `ble_last_seen`, `ble_last_error`, `ble_poll_failures`.
-- resilient setup path: entries/platforms restore from cached `CONF_SERVICE_DATA` even when the controller is not connectable at boot, then refresh on later advertisements.
-- write coalescing for fan/light commands: duplicate writes with identical target state within `5s` are skipped.
+Behavior details, verification commands, and known limitations: [SPEC.md](SPEC.md).
 
-Verification notes for this release (repository-only):
-- `python3 -m compileall custom_components/ac_infinity_ble` (pass)
-- `python3 -m pytest` (runs, no tests collected in this repository)
+---
 
-1.1.0 (disruptivepatternmaterial)
+## Install (HACS)
 
-Added multi-port control for controllers driving several loads at once (the office 69 Pro: two fans + a grow light). When a config entry carries a `ports` map (`const.CONF_PORTS`), the integration uses `controller.MultiPortController` (per-port state cache, reads every configured port in one connected BLE session, writes a single port via `set_port_level`) and creates one `fan` per `kind: fan` port plus one `light` per `kind: light` port (`light.py`), each bound to a fixed port index instead of `choose_port`. Without a port map the single-port behaviour is unchanged.
+1. HACS → **Integrations** → **⋮** → **Custom repositories**
+2. Add `https://github.com/disruptivepatternmaterial/ac-infinity-hacs` as type **Integration**
+3. Search **AC Infinity BLE (NET Fork)** → **Download**
+4. Restart Home Assistant
+5. **Settings → Devices & services → Add integration** → **AC Infinity BLE (NET Fork)**
 
-🚧 NOT YET VERIFIED on the live office controller: the office is still on Wi-Fi/cloud and cannot advertise BLE until switched to Bluetooth mode. The BLE port index is assumed zero-based (cloud "Port N" -> index N-1); this and per-port isolation must be probed on the live device before relying on it. See SPEC.md "Multi-port control".
+After adding the custom repo once, future updates: HACS → **AC Infinity BLE (NET Fork)** → **Update** (shows version e.g. `v1.2.1`, not a commit hash, once a [GitHub release](https://github.com/disruptivepatternmaterial/ac-infinity-hacs/releases) exists for that version).
 
-1.0.7 (disruptivepatternmaterial)
+### Manual install
 
-Config flow now discovers with `connectable=False`. Controllers heard only via a non-connectable Bluetooth proxy were invisible to the add flow (`no_devices_found`) unless a brief connectable window happened to coincide; this makes them reliably listable. The connectable link for the connection test / setup is still established on demand.
+Copy `custom_components/ac_infinity_ble/` to `/config/custom_components/` and restart HA.
 
-1.0.6 (disruptivepatternmaterial)
+---
 
-Fixed the Home Assistant UI showing stale fan/sensor state. The controller's advertisements often arrive only via a non-connectable Bluetooth proxy, but the coordinator was registered with `connectable=True` and therefore ignored them, so entities only refreshed on the 30s poll (which does not re-read temperature). Changed the coordinator to `connectable=False` so it consumes all advertisements (full state lives in the manufacturer data); commands and polls still establish their own connectable link on demand. Verified: with `connectable=False`, `fan`/`temperature`/`humidity`/`vpd` track live advertisements.
+## Deploy checklist (BowmanMtn)
 
-Made `fan` commands optimistic: `set_percentage`/`turn_on`/`turn_off` now write entity state immediately after the BLE command instead of waiting for the next advertisement/poll, so the card reflects the change instantly.
+| Step | Command / action |
+|------|------------------|
+| Pull latest | HACS → Update **AC Infinity BLE (NET Fork)** |
+| Verify version | `/config/custom_components/ac_infinity_ble/manifest.json` → `"version": "1.2.2"` |
+| Restart | Restart Home Assistant |
+| Smoke test | Fan speed change; temp/humidity show `unknown` when device has not reported (not `0`) |
 
-1.0.5 (disruptivepatternmaterial)
+---
 
-Renamed integration domain from `ac_infinity` to `ac_infinity_ble` (directory, manifest, const.DOMAIN). This lets the local-BLE integration coexist with the cloud `ac_infinity` integration (dalinicus) on the same Home Assistant instance, so controllers can be migrated from cloud to local one at a time.
+## What this fork adds (summary)
 
-Added `controller.py` with `PortAwareController`, used in place of the upstream `ACInfinityController`. The upstream `ac-infinity-ble==0.4.3` library hardcodes the UIS port index to `0` in every command and read. On multi-port controllers (e.g. Controller 69 Pro) the fan is often on a different port, so commands were acknowledged by the controller but moved nothing. `PortAwareController` targets the controller's currently selected port (`choose_port`, populated from each advertisement). Verified live on a Controller 69 Pro: `fan.set_percentage` now changes the fan (0 -> 5, fan_state 0 -> 2) and `fan.turn_off` returns it to the configured off-speed. (See SPEC.md "Known limitations" for the single-port caveat.)
+| Area | Behavior |
+|------|----------|
+| **Domain** | `ac_infinity_ble` — runs beside cloud `ac_infinity` |
+| **Multi-port** | Office 69 Pro: separate `fan` / `light` entities per port map |
+| **Port selection** | `PortAwareController` uses advertisement `choose_port` (upstream hardcoded port 0) |
+| **Advertisements** | Coordinator `connectable=False` so proxy-only adverts update state |
+| **BLE manager** | Global lock, connect gap, staggered polls, passive-first, round-robin multi-port |
+| **Options** | `poll_interval_seconds`, `passive_only`, `min_connect_gap_seconds`, `command_retry_count` |
+| **Diagnostics** | `ble_last_rssi`, `ble_last_seen`, `ble_last_error`, `ble_poll_failures` |
+| **Sensor fidelity** | Temp/hum/VPD read raw `state.tmp/hum/vpd` — missing readings stay `unknown`, not fabricated `0` |
+| **Write coalescing** | Duplicate fan/light commands within 5s skipped |
 
-Cast `sw_version` to `str` in fan.py and sensor.py device info (upstream passed an int, which Home Assistant warns will stop working in 2026.12.0).
+---
 
-1.0.4
+## Changelog (NET Fork)
 
-Added Airtap T4 (device type ID 6) to DEVICE_MODEL in const.py
+### v1.2.2
 
-Added FanEntityFeature.TURN_ON | FanEntityFeature.TURN_OFF to _attr_supported_features in fan.py (fixes "does not support action fan.turn_off" error in HA 2026.3.4+)
+- **README:** full NET Fork install/deploy docs, changelog, tests, HACS naming
 
-Fixed _async_update_attrs in fan.py to guard against None or zero fan speed when computing percentage
+### v1.2.1
 
-Fixed config_flow.py to skip non-AC-Infinity Bluetooth devices during discovery (fixes "500 Internal Server Error" when loading config flow)
+- **HACS/manifest name:** AC Infinity BLE (NET Fork)
+- **Sensor data fidelity:** bypass upstream `ac-infinity-ble==0.4.3` properties that use `or 0` for missing tmp/hum/vpd; entities report `unknown` when the device has not sent a reading
+- **Tests:** `tests/test_sensor.py` (12 tests)
 
-Fixed config_flow.py to abort with "no_devices_found" if no AC Infinity devices are visible in BT scan, instead of showing an empty/broken address form
+### v1.2.0
 
-Fixed config_flow.py to safely handle missing address in _discovered_devices on form submit
+- Global BLE session manager (`ble_manager.py`): house-level lock, `min_connect_gap_seconds` (default 3s), staggered poll offsets
+- Passive-first polling: `poll_interval_seconds` (default 120), `passive_only`, multi-port round-robin (one port per poll cycle)
+- Options flow: poll interval, passive-only, connect gap, command retry count
+- Diagnostic sensors: BLE RSSI, last seen, last error, poll failures
+- Resilient setup from cached `CONF_SERVICE_DATA` when device not connectable at boot
+- Fan/light write coalescing (5s duplicate skip)
 
-Added not_supported and device_not_found error strings to strings.json and translations/en.json
+### v1.1.0
 
-Note:
-For the Airtap vent fans, humidity is provided as an entity but these devices have no humidity sensor.
+- Multi-port control (`MultiPortController`): one fan/light entity per configured port
+- 🚧 Office 69 Pro BLE port indexing not production-verified until device is in Bluetooth mode (see SPEC.md)
+
+### v1.0.7
+
+- Config flow discovery with `connectable=False` (controllers visible via non-connectable proxy)
+
+### v1.0.6
+
+- Coordinator consumes non-connectable advertisements (fixes stale UI until poll)
+- Optimistic fan entity state after BLE commands
+
+### v1.0.5
+
+- Domain rename `ac_infinity` → `ac_infinity_ble`
+- `PortAwareController` for correct UIS port targeting
+- `sw_version` cast to string in device info
+
+### v1.0.4 and earlier
+
+- Airtap T4 (type 6), HA 2026.3.4+ fan features, config flow hardening (see git history)
+
+---
+
+## Tests
+
+```bash
+cd ac-infinity-hacs
+python3 -m pytest tests/ -v
+```
+
+Requires only `pytest` (HA/upstream libs stubbed in `tests/conftest.py`). **12 tests** cover sensor null passthrough and zero passthrough for tmp/hum/vpd.
+
+Compile check:
+
+```bash
+python3 -m compileall custom_components/ac_infinity_ble
+```
+
+---
+
+## Hardware notes
+
+- UIS controllers must be in **Bluetooth mode** (Wi-Fi and BLE are mutually exclusive on 69 Pro).
+- Airtap vent fans expose a humidity entity but have **no humidity sensor** — expect missing/null behavior, not a real 0% reading after v1.2.1.
+
+---
+
+## Credits
+
+Original integration: [@hunterjm](https://github.com/hunterjm/ac-infinity-hacs).  
+Intermediate fork: [@way-lo](https://github.com/way-lo/ac-infinity-hacs).  
+NET Fork maintenance: [disruptivepatternmaterial](https://github.com/disruptivepatternmaterial/ac-infinity-hacs).
