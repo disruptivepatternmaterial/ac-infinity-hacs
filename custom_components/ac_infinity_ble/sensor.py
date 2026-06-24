@@ -105,7 +105,7 @@ class TemperatureSensor(ACInfinitySensor):
     @callback
     def _async_update_attrs(self) -> None:
         """Handle updating _attr values."""
-        self._attr_native_value = self._device.temperature
+        self._attr_native_value = self._device.state.tmp
 
 
 class HumiditySensor(ACInfinitySensor):
@@ -122,7 +122,7 @@ class HumiditySensor(ACInfinitySensor):
     @callback
     def _async_update_attrs(self) -> None:
         """Handle updating _attr values."""
-        self._attr_native_value = self._device.humidity
+        self._attr_native_value = self._device.state.hum
 
 
 class VpdSensor(ACInfinitySensor):
@@ -139,7 +139,7 @@ class VpdSensor(ACInfinitySensor):
     @callback
     def _async_update_attrs(self) -> None:
         """Handle updating _attr values."""
-        self._attr_native_value = self._device.vpd
+        self._attr_native_value = self._device.state.vpd
 
 
 class BLELastRSSISensor(ACInfinitySensor):
