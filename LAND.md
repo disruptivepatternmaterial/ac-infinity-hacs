@@ -2,9 +2,11 @@
 
 Source: multi-model adversarial review (Opus 4.8, GPT-5.3 Codex, Gemini 3.5, Sonnet 4.6, GPT-5.5)
 Scope reviewed: `git diff 1655604..HEAD` (merge-base with upstream `hunterjm/ac-infinity-hacs`)
-Status: ACT ON items #1-#5 LANDED 2026-06-29 (verified; tests green, 35 pytest cases).
+Status: ACT ON items #1-#5 LANDED 2026-06-29 (verified; tests green, 44 pytest cases).
 Re-reviewed 2026-06-29 by a second 4-model panel (Opus 4.8, GPT-5.3 Codex, Sonnet 4.6,
-GPT-5.5): all five fixes confirmed correct, no regressions. Follow-ups queued below.
+GPT-5.5): all five fixes confirmed correct, no regressions. A third panel reviewed the
+incremental hardening (disconnect bound, dead-code, short-response guard, startup wait) —
+see "Third-panel follow-ups" below. All accepted findings landed.
 
 Consensus column = how many of 5 reviewers independently flagged it.
 
@@ -153,6 +155,27 @@ Deferred-list resolution (2026-06-29):
 - Manifest `connectable: true` — **WON'T FIX (intentional).** Auto-discovery should require a
   connectable path so a discovered device can actually accept commands; state-only (proxy)
   controllers can still be added manually. Matches the on-demand-connect command model.
+
+## Third-panel follow-ups (2026-06-29) — all LANDED
+
+Panel: Opus 4.8, GPT-5.3 Codex, Sonnet 4.6, GPT-5.5. No criticals; consensus follow-ups:
+
+- (4/4) Short response counted as a successful poll -> stale state, no telemetry/back-off.
+  **LANDED.** Non-empty frames shorter than `MIN_MODEL_DATA_LEN (19)` now raise
+  `InvalidResponseError`, which the coordinator records as a poll failure and backs off; a `None`
+  response stays a benign no-op. `controller.py`. (Also moved `MultiPortController` callback to
+  fire only on a valid frame.)
+- (4/4) New `controller.py` paths untested (module was stubbed). **LANDED.** conftest now provides
+  a real fake upstream base and imports the real controller/models; `tests/test_controller.py`
+  covers valid/short/None responses for both controllers and the disconnect override's
+  swallow-vs-propagate behavior.
+- (3/4) `async_wait_ready` early-return dropped the offline-startup diagnostic. **LANDED.** It now
+  logs at debug when readiness came from cached state with no live advertisement yet.
+- (4/4) Nit: stale test count in `LAND.md`. **FIXED** (now 44, matching README/SPEC).
+
+Known test-harness limitation (acceptable): the disconnect 10s ceiling itself isn't asserted
+because conftest stubs `async_timeout.timeout` as a no-op; the swallow/propagate branches are
+covered instead. HA runs real `async_timeout`.
 
 ## Clean areas (per reviewers)
 

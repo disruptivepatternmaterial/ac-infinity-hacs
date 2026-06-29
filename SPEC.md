@@ -32,14 +32,18 @@ Landed from the multi-model code review (see `LAND.md`):
   `async_timeout(DISCONNECT_TIMEOUT_SECONDS=10)` and never propagates, so a hung disconnect
   cannot keep holding the lock either.
 - **Robust to short BLE responses.** `controller.update` / `MultiPortController.update` guard
-  `len(data) >= 19` before indexing `data[12/15/18]`, so a truncated/corrupt notification logs at
-  debug and is skipped instead of raising `IndexError` and failing the poll.
+  `len(data) >= MIN_MODEL_DATA_LEN (19)` before indexing `data[12/15/18]`. A `None` response is a
+  benign no-op; a non-empty but truncated/corrupt frame raises `InvalidResponseError` instead of
+  `IndexError`, which the coordinator records as a poll failure (`ble_last_error` /
+  `ble_poll_failures`) and backs off, rather than silently counting it as a successful poll.
 - **No 30s boot stall for offline devices.** `coordinator.async_wait_ready` returns immediately
   when `controller.name` is already populated (state restored from cached service data), instead
-  of blocking HA startup up to `DEVICE_STARTUP_TIMEOUT` waiting for an advertisement.
+  of blocking HA startup up to `DEVICE_STARTUP_TIMEOUT` waiting for an advertisement; it logs at
+  debug when readiness came from cache with no live advertisement yet.
 - **Tests:** `tests/test_ble_manager.py` (scheduling/back-off), `tests/test_coalesce.py`
-  (skip-on-failure), and `tests/test_coordinator.py` (poll-gating lifecycle + startup wait) added;
-  suite now 37 pytest cases.
+  (skip-on-failure), `tests/test_coordinator.py` (poll-gating lifecycle + startup wait), and
+  `tests/test_controller.py` (short-response guard + disconnect override) added; suite now 44
+  pytest cases.
 
 ## 2026-06-24 updates (v1.2.1+)
 
