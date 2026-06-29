@@ -85,8 +85,24 @@ class TestPortFanCoalescing:
         assert calls == [(1, 2, 5)]
 
 
+class TestSinglePortFanTurnOff:
+    def test_failed_turn_off_does_not_block_retry(self):
+        calls = []
+
+        async def turn_off():
+            calls.append("off")
+            raise RuntimeError("ble fail")
+
+        fan = _bare(ACInfinityFan)
+        fan._device.turn_off = turn_off
+        for _ in range(2):
+            with pytest.raises(RuntimeError):
+                asyncio.run(fan.async_turn_off())
+        assert calls == ["off", "off"]
+
+
 class TestGrowLightCoalescing:
-    def test_failed_write_does_not_block_retry(self):
+    def test_failed_turn_off_does_not_block_retry(self):
         calls = []
 
         async def set_port_level(port, work_type, level):
@@ -99,3 +115,29 @@ class TestGrowLightCoalescing:
             with pytest.raises(RuntimeError):
                 asyncio.run(light.async_turn_off())
         assert calls == [(1, 1, 0), (1, 1, 0)]
+
+    def test_turn_on_with_brightness_duplicate_is_skipped(self):
+        calls = []
+
+        async def set_port_level(port, work_type, level):
+            calls.append((port, work_type, level))
+
+        light = _bare(ACInfinityGrowLight)
+        light._device.set_port_level = set_port_level
+        asyncio.run(light.async_turn_on(brightness=255))
+        asyncio.run(light.async_turn_on(brightness=255))
+        assert calls == [(1, 2, 10)]  # 255/255*10 -> level 10, second skipped
+
+    def test_turn_on_failure_does_not_block_retry(self):
+        calls = []
+
+        async def set_port_level(port, work_type, level):
+            calls.append((port, work_type, level))
+            raise RuntimeError("ble fail")
+
+        light = _bare(ACInfinityGrowLight)
+        light._device.set_port_level = set_port_level
+        for _ in range(2):
+            with pytest.raises(RuntimeError):
+                asyncio.run(light.async_turn_on(brightness=255))
+        assert calls == [(1, 2, 10), (1, 2, 10)]

@@ -55,7 +55,7 @@ class TestPollFailureBackoff:
         m.note_poll_failure(ADDR, RuntimeError("x"))
         assert (
             m.should_poll_now(
-                ADDR, seconds_since_last_poll=None, poll_interval_seconds=120
+                ADDR, poll_interval_seconds=120
             )
             is False
         )
@@ -66,7 +66,7 @@ class TestShouldPollNow:
         m = _manager(interval=120)
         assert (
             m.should_poll_now(
-                ADDR, seconds_since_last_poll=None, poll_interval_seconds=120
+                ADDR, poll_interval_seconds=120
             )
             is False
         )
@@ -74,11 +74,11 @@ class TestShouldPollNow:
 
     def test_returns_true_once_due_passes(self):
         m = _manager(interval=120)
-        m.should_poll_now(ADDR, seconds_since_last_poll=None, poll_interval_seconds=120)
+        m.should_poll_now(ADDR, poll_interval_seconds=120)
         m.stats(ADDR).next_poll_due_monotonic = monotonic() - 1
         assert (
             m.should_poll_now(
-                ADDR, seconds_since_last_poll=None, poll_interval_seconds=120
+                ADDR, poll_interval_seconds=120
             )
             is True
         )

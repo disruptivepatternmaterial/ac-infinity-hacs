@@ -29,7 +29,15 @@ _mod("bleak_retry_connector",
      retry_bluetooth_connection_error=lambda *a, **k: (lambda f: f),
      BLEAK_RETRY_EXCEPTIONS=(Exception,),
 )
-_mod("async_timeout")
+import contextlib as _contextlib
+
+
+@_contextlib.asynccontextmanager
+async def _noop_timeout(_seconds):
+    yield
+
+
+_mod("async_timeout", timeout=_noop_timeout)
 
 # ---------------------------------------------------------------------------
 # upstream ac_infinity_ble library
@@ -50,7 +58,12 @@ _mod("homeassistant.const",
      Platform=MagicMock(), PERCENTAGE="%", SIGNAL_STRENGTH_DECIBELS_MILLIWATT="dBm",
      UnitOfTemperature=MagicMock(), UnitOfPressure=MagicMock(),
 )
-_mod("homeassistant.core", HomeAssistant=MagicMock, callback=lambda f: f)
+class _CoreState:
+    running = "running"
+
+
+_mod("homeassistant.core",
+     HomeAssistant=MagicMock, callback=lambda f: f, CoreState=_CoreState)
 
 
 # Minimal real implementations of the percentage helpers used by fan.py so the
@@ -86,12 +99,15 @@ _mod("homeassistant.components")
 _mod("homeassistant.components.bluetooth",
      BluetoothServiceInfoBleak=MagicMock,
      BluetoothChange=MagicMock,
-     async_ble_device_from_address=MagicMock,
+     BluetoothScanningMode=MagicMock(),
+     async_ble_device_from_address=MagicMock(),
 )
 class _Generic:
     def __class_getitem__(cls, item):
         return cls
 
+_mod("homeassistant.components.bluetooth.active_update_coordinator",
+     ActiveBluetoothDataUpdateCoordinator=_Generic)
 _mod("homeassistant.components.bluetooth.passive_update_coordinator",
      PassiveBluetoothCoordinatorEntity=_Generic)
 _mod("homeassistant.components.sensor",
@@ -125,8 +141,6 @@ _mod("custom_components.ac_infinity_ble.const",
      DEFAULT_POLL_INTERVAL_SECONDS=120, FAILURE_BACKOFF_SECONDS=30,
      BLE_SESSION_TIMEOUT_SECONDS=60,
 )
-_mod("custom_components.ac_infinity_ble.coordinator",
-     ACInfinityDataUpdateCoordinator=MagicMock)
 _mod("custom_components.ac_infinity_ble.models",
      ACInfinityData=MagicMock, PortConfig=MagicMock, PortState=MagicMock)
 _mod("custom_components.ac_infinity_ble.controller",
