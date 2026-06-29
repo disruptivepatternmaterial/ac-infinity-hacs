@@ -135,7 +135,14 @@ class ACInfinityDataUpdateCoordinator(ActiveBluetoothDataUpdateCoordinator[None]
         super()._async_handle_bluetooth_event(service_info, change)
 
     async def async_wait_ready(self) -> bool:
-        """Wait for the device to be ready."""
+        """Wait for the device to be ready.
+
+        If the controller already has state (e.g. restored from cached service
+        data at boot, or an advertisement arrived before this ran), don't block
+        HA startup for up to DEVICE_STARTUP_TIMEOUT waiting for an advertisement.
+        """
+        if self.controller.name:
+            return True
         with contextlib.suppress(asyncio.TimeoutError):
             async with async_timeout.timeout(DEVICE_STARTUP_TIMEOUT):
                 await self._ready_event.wait()

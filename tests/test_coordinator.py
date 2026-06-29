@@ -112,3 +112,23 @@ class TestAsyncUpdate:
             asyncio.run(c._async_update(_svc()))
         # Next advertisement: flag cleared, back-off in force -> no poll.
         assert c._needs_poll(_svc(), None) is False
+
+
+class TestAsyncWaitReady:
+    def test_returns_immediately_when_state_restored(self):
+        """Cached/restored state (controller.name set) must not block startup."""
+        c = _coord()
+        c.controller.name = "Office 69 Pro"
+        c._ready_event = asyncio.Event()  # never set
+        assert asyncio.run(c.async_wait_ready()) is True
+
+    def test_returns_true_when_event_already_set(self):
+        c = _coord()
+        c.controller.name = None
+
+        async def _run():
+            c._ready_event = asyncio.Event()
+            c._ready_event.set()
+            return await c.async_wait_ready()
+
+        assert asyncio.run(_run()) is True
