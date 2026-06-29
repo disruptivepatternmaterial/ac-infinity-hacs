@@ -122,20 +122,23 @@ NOT changed (deliberate):
 
 ---
 
-## Follow-ups from re-review (2026-06-29) — QUEUED, not yet landed
+## Follow-ups from re-review (2026-06-29)
 
-- WARNING (3/4) — `async_timeout(60s)` does not bound a hang inside the per-command
-  `finally: await self._execute_disconnect()`. A device that hangs specifically on disconnect
-  can still hold the global BLE lock past 60s. Fix: bound/shield `_execute_disconnect` (or add
-  phase-level timeouts around connect/send/disconnect). `controller.py`.
-- WARNING (2/4) — connect-gap sleep still runs inside `_global_lock` (`ble_manager.acquire`),
-  so a waiter is blocked up to `min_connect_gap_seconds` + session time. Bounded now (not a hung
-  lock), efficiency only. Consider spacing connects without holding the lock during the sleep.
-- CONSIDER (2/4) — `except Exception` in `controller._run_with_retries` and
-  `coordinator._async_update` does not catch `asyncio.CancelledError` (a BaseException), so a
-  transport-level cancellation skips `note_command_failure`/`note_poll_failure` back-off. Opus
-  notes propagation is the desired behavior for true task cancel; decide per-case if BLE-layer
-  cancellations should be accounted.
+- WARNING (3/4) — disconnect-hang bound. **LANDED 2026-06-29.** `PortAwareController` now
+  overrides `_execute_disconnect` to wrap `super()._execute_disconnect()` in
+  `async_timeout(DISCONNECT_TIMEOUT_SECONDS=10)` and swallow errors, so a hung disconnect during
+  unwind cannot keep holding the global lock. `controller.py`.
+- WARNING (2/4) — connect-gap sleep inside `_global_lock`. **WON'T FIX (by design).** The global
+  lock must stay held across `yield` to serialize BLE sessions house-wide (the guarantee that
+  motivated the lock: avoid concurrent connects / `_notify_future` clobbering). Releasing the
+  lock to sleep outside it would break that serialization; keeping the lock and sleeping outside
+  is not possible with a single lock. The gap is bounded (default 3s) and the session is now
+  timeout-bounded, so the residual is acceptable.
+- CONSIDER (2/4) — `except Exception` does not catch `asyncio.CancelledError`. **WON'T FIX
+  (correct as-is).** A genuine `CancelledError` means HA is cancelling the task (shutdown/reload)
+  and must propagate without retry or being recorded as a device failure (strongest reviewer,
+  Opus, concurs). BLE-layer timeouts surface as `TimeoutError` (an `Exception`) and ARE caught,
+  retried, and backed off — which is the path that matters.
 - Doc note: LAND #3 suggested `.get(type, "Unknown AC Infinity Controller")`; landed code uses
   bare `.get(type)` (model=None), matching the existing multi-port pattern. Intentional.
 
