@@ -21,7 +21,11 @@ from ac_infinity_ble import ACInfinityController, CallbackType
 import async_timeout
 
 from .ble_manager import ACInfinityBLEManager
-from .const import BLE_SESSION_TIMEOUT_SECONDS, DEFAULT_COMMAND_RETRY_COUNT
+from .const import (
+    BLE_SESSION_TIMEOUT_SECONDS,
+    DEFAULT_COMMAND_RETRY_COUNT,
+    DISCONNECT_TIMEOUT_SECONDS,
+)
 from .models import PortState
 
 _LOGGER = logging.getLogger(__name__)
@@ -72,6 +76,22 @@ class PortAwareController(ACInfinityController):
                 )
         if last_error is not None:
             raise last_error
+
+    async def _execute_disconnect(self) -> None:
+        """Bound disconnect cleanup so a hung disconnect can't hold the lock.
+
+        Disconnect runs in each command's ``finally``, which executes while the
+        task is unwinding after the session timeout has fired. The session
+        ``async_timeout`` no longer guards that unwind, so give disconnect its
+        own ceiling and never let it raise (cleanup must always complete).
+        """
+        try:
+            async with async_timeout.timeout(DISCONNECT_TIMEOUT_SECONDS):
+                await super()._execute_disconnect()
+        except Exception as err:  # noqa: BLE001 - cleanup must never propagate
+            _LOGGER.debug(
+                "%s: disconnect cleanup timed out/failed: %s", self.address, err
+            )
 
     async def update(self) -> None:
         """Update the controller, reading the selected port."""

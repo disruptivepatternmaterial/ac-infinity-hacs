@@ -17,6 +17,10 @@ FAILURE_BACKOFF_SECONDS = 30
 # Hard ceiling on a single BLE session (connect + command + disconnect) held
 # under the global lock, so one hung device cannot block every other device.
 BLE_SESSION_TIMEOUT_SECONDS = 60
+# Separate, tighter ceiling on disconnect cleanup. Disconnect runs in each
+# command's `finally`, i.e. during unwind after the session timeout fires, so it
+# needs its own bound or a hung disconnect would still hold the global lock.
+DISCONNECT_TIMEOUT_SECONDS = 10
 
 CONF_POLL_INTERVAL_SECONDS = "poll_interval_seconds"
 CONF_PASSIVE_ONLY = "passive_only"
