@@ -2,7 +2,9 @@
 
 Source: multi-model adversarial review (Opus 4.8, GPT-5.3 Codex, Gemini 3.5, Sonnet 4.6, GPT-5.5)
 Scope reviewed: `git diff 1655604..HEAD` (merge-base with upstream `hunterjm/ac-infinity-hacs`)
-Status: ACT ON items #1-#5 LANDED 2026-06-29 (verified; tests green, 25 pytest cases).
+Status: ACT ON items #1-#5 LANDED 2026-06-29 (verified; tests green, 35 pytest cases).
+Re-reviewed 2026-06-29 by a second 4-model panel (Opus 4.8, GPT-5.3 Codex, Sonnet 4.6,
+GPT-5.5): all five fixes confirmed correct, no regressions. Follow-ups queued below.
 
 Consensus column = how many of 5 reviewers independently flagged it.
 
@@ -119,6 +121,26 @@ NOT changed (deliberate):
   returning the same `_state` object; mutates the identical `DeviceInfo`. Style inconsistency only.
 
 ---
+
+## Follow-ups from re-review (2026-06-29) — QUEUED, not yet landed
+
+- WARNING (3/4) — `async_timeout(60s)` does not bound a hang inside the per-command
+  `finally: await self._execute_disconnect()`. A device that hangs specifically on disconnect
+  can still hold the global BLE lock past 60s. Fix: bound/shield `_execute_disconnect` (or add
+  phase-level timeouts around connect/send/disconnect). `controller.py`.
+- WARNING (2/4) — connect-gap sleep still runs inside `_global_lock` (`ble_manager.acquire`),
+  so a waiter is blocked up to `min_connect_gap_seconds` + session time. Bounded now (not a hung
+  lock), efficiency only. Consider spacing connects without holding the lock during the sleep.
+- CONSIDER (2/4) — `except Exception` in `controller._run_with_retries` and
+  `coordinator._async_update` does not catch `asyncio.CancelledError` (a BaseException), so a
+  transport-level cancellation skips `note_command_failure`/`note_poll_failure` back-off. Opus
+  notes propagation is the desired behavior for true task cancel; decide per-case if BLE-layer
+  cancellations should be accounted.
+- Doc note: LAND #3 suggested `.get(type, "Unknown AC Infinity Controller")`; landed code uses
+  bare `.get(type)` (model=None), matching the existing multi-port pattern. Intentional.
+
+Still NOT changed (deliberate, from first review): VPD `ATMOSPHERIC_PRESSURE` device_class,
+manifest `connectable: true`, BLE-response `IndexError` guard, 30s offline-startup wait.
 
 ## Clean areas (per reviewers)
 

@@ -28,8 +28,9 @@ Landed from the multi-model code review (see `LAND.md`):
 - **Bounded BLE session.** `controller._run_with_retries` wraps each session in
   `async_timeout(BLE_SESSION_TIMEOUT_SECONDS=60)` so one hung device can't hold the global BLE
   lock indefinitely.
-- **Tests:** `tests/test_ble_manager.py` (scheduling/back-off) + `tests/test_coalesce.py`
-  (skip-on-failure) added; suite now 25 pytest cases.
+- **Tests:** `tests/test_ble_manager.py` (scheduling/back-off), `tests/test_coalesce.py`
+  (skip-on-failure), and `tests/test_coordinator.py` (poll-gating lifecycle) added; suite now
+  35 pytest cases.
 
 ## 2026-06-24 updates (v1.2.1+)
 
