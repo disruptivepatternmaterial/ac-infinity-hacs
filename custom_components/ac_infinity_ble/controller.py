@@ -30,6 +30,19 @@ from .models import PortState
 
 _LOGGER = logging.getLogger(__name__)
 
+# The model-data response is parsed at byte offsets 12, 15 and 18, so a valid
+# frame is at least 19 bytes.
+MIN_MODEL_DATA_LEN = 19
+
+
+class InvalidResponseError(Exception):
+    """Raised when a non-empty BLE response is too short to parse.
+
+    Treated as a poll/command failure so it surfaces in diagnostics
+    (ble_last_error / ble_poll_failures) and triggers the failure back-off,
+    rather than being silently counted as a successful poll.
+    """
+
 
 class PortAwareController(ACInfinityController):
     """An ACInfinityController that addresses the selected UIS port."""
@@ -102,21 +115,20 @@ class PortAwareController(ACInfinityController):
                     self._state.type, self._port, self.sequence
                 )
                 data = await self._send_command(command)
-                if data is not None and len(data) >= 19:
-                    self._state.work_type = data[12]
-                    self._state.level_off = data[15]
-                    self._state.level_on = data[18]
-                    if self._state.work_type == 1:
-                        self._state.fan = self._state.level_off
-                    if self._state.work_type == 2:
-                        self._state.fan = self._state.level_on
-                    self._fire_callbacks(CallbackType.UPDATE_RESPONSE)
-                elif data is not None:
-                    _LOGGER.debug(
-                        "%s: short update response (%d bytes), skipping",
-                        self.address,
-                        len(data),
+                if data is None:
+                    return
+                if len(data) < MIN_MODEL_DATA_LEN:
+                    raise InvalidResponseError(
+                        f"short update response ({len(data)} bytes)"
                     )
+                self._state.work_type = data[12]
+                self._state.level_off = data[15]
+                self._state.level_on = data[18]
+                if self._state.work_type == 1:
+                    self._state.fan = self._state.level_off
+                if self._state.work_type == 2:
+                    self._state.fan = self._state.level_on
+                self._fire_callbacks(CallbackType.UPDATE_RESPONSE)
             finally:
                 await self._execute_disconnect()
 
@@ -219,23 +231,21 @@ class MultiPortController(PortAwareController):
                     self._state.type, port, self.sequence
                 )
                 data = await self._send_command(command)
-                if data is not None and len(data) >= 19:
-                    self.port_states[port] = PortState(
-                        work_type=data[12],
-                        level_off=data[15],
-                        level_on=data[18],
+                if data is None:
+                    return
+                if len(data) < MIN_MODEL_DATA_LEN:
+                    raise InvalidResponseError(
+                        f"short port-{port} response ({len(data)} bytes)"
                     )
-                elif data is not None:
-                    _LOGGER.debug(
-                        "%s: short port-%d response (%d bytes), skipping",
-                        self.address,
-                        port,
-                        len(data),
-                    )
+                self.port_states[port] = PortState(
+                    work_type=data[12],
+                    level_off=data[15],
+                    level_on=data[18],
+                )
+                self._fire_callbacks(CallbackType.UPDATE_RESPONSE)
             finally:
                 await self._execute_disconnect()
         await self._run_with_retries(f"poll_port_{port}", _do_update)
-        self._fire_callbacks(CallbackType.UPDATE_RESPONSE)
 
     async def set_port_level(self, port: int, work_type: int, level: int) -> None:
         """Set one port to a work_type (1=off, 2=on) and level (0-10)."""
