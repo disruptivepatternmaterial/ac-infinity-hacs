@@ -42,10 +42,31 @@ _mod("async_timeout", timeout=_noop_timeout)
 # ---------------------------------------------------------------------------
 # upstream ac_infinity_ble library
 # ---------------------------------------------------------------------------
+class _FakeBaseController:
+    """Stand-in for ac_infinity_ble.ACInfinityController.
+
+    Real enough that the fork's PortAwareController/MultiPortController can be
+    subclassed and unit-tested. _execute_disconnect delegates to an instance
+    hook (_raw_disconnect) so tests can make disconnect raise/hang.
+    """
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    @property
+    def state(self):
+        return self._state
+
+    async def _execute_disconnect(self):
+        raw = getattr(self, "_raw_disconnect", None)
+        if raw is not None:
+            await raw()
+
+
 _mod("ac_infinity_ble",
-     ACInfinityController=MagicMock,
+     ACInfinityController=_FakeBaseController,
      DeviceInfo=MagicMock,
-     CallbackType=MagicMock,
+     CallbackType=MagicMock(),
 )
 
 # ---------------------------------------------------------------------------
@@ -139,11 +160,7 @@ _mod("custom_components.ac_infinity_ble.const",
      CONF_POLL_INTERVAL_SECONDS="poll", DEFAULT_COMMAND_RETRY_COUNT=1,
      DEFAULT_MIN_CONNECT_GAP_SECONDS=3, DEFAULT_PASSIVE_ONLY=False,
      DEFAULT_POLL_INTERVAL_SECONDS=120, FAILURE_BACKOFF_SECONDS=30,
-     BLE_SESSION_TIMEOUT_SECONDS=60,
+     BLE_SESSION_TIMEOUT_SECONDS=60, DISCONNECT_TIMEOUT_SECONDS=10,
 )
-_mod("custom_components.ac_infinity_ble.models",
-     ACInfinityData=MagicMock, PortConfig=MagicMock, PortState=MagicMock)
-_mod("custom_components.ac_infinity_ble.controller",
-     MultiPortController=MagicMock, PortAwareController=MagicMock)
 _mod("custom_components.ac_infinity_ble.number")
 _mod("custom_components.ac_infinity_ble.options_flow")

@@ -7,6 +7,7 @@ Instances are built with object.__new__ to bypass HA's __init__.
 from __future__ import annotations
 
 import asyncio
+import logging
 from time import monotonic
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -42,11 +43,14 @@ def _connectable():
     """Default: a connectable device exists (truthy)."""
     bluetooth.async_ble_device_from_address.return_value = object()
     yield
+    bluetooth.async_ble_device_from_address.reset_mock(return_value=True)
 
 
 def _coord(passive_only=False, was_unavailable=False, interval=120):
     c = object.__new__(ACInfinityDataUpdateCoordinator)
     c.hass = SimpleNamespace(state="running")
+    c.address = ADDR
+    c.logger = logging.getLogger("test.coordinator")
     c.passive_only = passive_only
     c._was_unavailable = was_unavailable
     c.poll_interval_seconds = interval
