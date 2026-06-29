@@ -142,6 +142,11 @@ class ACInfinityDataUpdateCoordinator(ActiveBluetoothDataUpdateCoordinator[None]
         HA startup for up to DEVICE_STARTUP_TIMEOUT waiting for an advertisement.
         """
         if self.controller.name:
+            if not self._ready_event.is_set():
+                self.logger.debug(
+                    "%s: state restored from cache; no live advertisement yet",
+                    self.address,
+                )
             return True
         with contextlib.suppress(asyncio.TimeoutError):
             async with async_timeout.timeout(DEVICE_STARTUP_TIMEOUT):
