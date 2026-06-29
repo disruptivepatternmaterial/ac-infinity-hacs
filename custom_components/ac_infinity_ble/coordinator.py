@@ -86,7 +86,6 @@ class ACInfinityDataUpdateCoordinator(ActiveBluetoothDataUpdateCoordinator[None]
         # multi-port / on-off state frozen).
         return self.ble_manager.should_poll_now(
             service_info.device.address,
-            seconds_since_last_poll=seconds_since_last_poll,
             poll_interval_seconds=self.poll_interval_seconds,
         )
 

@@ -118,7 +118,6 @@ class ACInfinityBLEManager:
         self,
         address: str,
         *,
-        seconds_since_last_poll: float | None,
         poll_interval_seconds: int,
     ) -> bool:
         """Return True when this address should actively poll now."""

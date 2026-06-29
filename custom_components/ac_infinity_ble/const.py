@@ -3,8 +3,6 @@ from bleak.exc import BleakError
 
 DOMAIN = "ac_infinity_ble"
 
-DEVICE_TIMEOUT = 30
-UPDATE_SECONDS = 15
 WRITE_COALESCE_SECONDS = 5
 
 DEFAULT_POLL_INTERVAL_SECONDS = 120
