@@ -3,7 +3,7 @@
 Local Bluetooth (BLE) control of AC Infinity UIS fan controllers in Home Assistant — no cloud dependency.
 
 **This repo:** [disruptivepatternmaterial/ac-infinity-hacs](https://github.com/disruptivepatternmaterial/ac-infinity-hacs)  
-**Current release:** [v1.2.2](https://github.com/disruptivepatternmaterial/ac-infinity-hacs/releases/tag/v1.2.2)  
+**Current release:** [v1.3.0](https://github.com/disruptivepatternmaterial/ac-infinity-hacs/releases/tag/v1.3.0)  
 **HACS name:** `AC Infinity BLE (NET Fork)`  
 **Integration domain:** `ac_infinity_ble` (coexists with cloud `ac_infinity` / dalinicus)
 
@@ -34,7 +34,7 @@ Copy `custom_components/ac_infinity_ble/` to `/config/custom_components/` and re
 | Step | Command / action |
 |------|------------------|
 | Pull latest | HACS → Update **AC Infinity BLE (NET Fork)** |
-| Verify version | `/config/custom_components/ac_infinity_ble/manifest.json` → `"version": "1.2.2"` |
+| Verify version | `/config/custom_components/ac_infinity_ble/manifest.json` → `"version": "1.3.0"` |
 | Restart | Restart Home Assistant |
 | Smoke test | Fan speed change; temp/humidity show `unknown` when device has not reported (not `0`) |
 
@@ -58,13 +58,19 @@ Copy `custom_components/ac_infinity_ble/` to `/config/custom_components/` and re
 
 ## Changelog (NET Fork)
 
-### v1.3.0 (unreleased) — multi-model review fixes
+### v1.3.0 — multi-model review hardening
 
-- **Polling fix:** active polls are scheduled from the last successful poll (not advertisement recency), so multi-port `port_states` and single-port on/off (`work_type`) refresh on `poll_interval_seconds` again instead of staying frozen while the controller advertises. Forced poll on setup/recovery; failed polls back off `min(30s, interval)`.
-- **Write coalescing:** the 5s duplicate-skip cache is recorded only after a successful BLE write, so a failed command can be retried immediately.
-- **No setup crash on controller types 9/12:** `DEVICE_MODEL` lookups use `.get()`.
-- **Bounded BLE session:** each connect/command/disconnect runs under a 60s timeout so a hung device can't hold the global BLE lock indefinitely.
-- **Tests:** added `test_ble_manager.py`, `test_coalesce.py`, `test_coordinator.py`, `test_controller.py`; suite now 44 cases.
+Fixes from three rounds of multi-model code review (see `LAND.md`). No new features; correctness, resilience, and test coverage.
+
+- **Polling fix (headline):** active polls are scheduled from the last successful poll, not advertisement recency. Previously, because the coordinator stamped the advertisement timestamp before evaluating the poll gate, active polling never fired while the controller was advertising — leaving multi-port `port_states` and single-port on/off (`work_type`, which is not in advertisements) frozen. Now polls run on `poll_interval_seconds`, with a forced poll on setup and on recovery from "unavailable".
+- **Poll failure back-off:** a failed poll backs off `min(30s, poll_interval_seconds)` instead of retrying on every advertisement.
+- **Write coalescing fix:** the 5s duplicate-skip cache is recorded only after a successful BLE write, so a command that failed can be retried immediately (previously a failed write poisoned the cache for 5s).
+- **No setup crash on controller types 9/12:** `DEVICE_MODEL` lookups use `.get()` instead of direct indexing.
+- **Bounded BLE sessions:** each connect/command/disconnect runs under a 60s timeout, and disconnect cleanup has its own 10s ceiling, so one hung device can't hold the global BLE lock indefinitely.
+- **Short/corrupt responses handled:** frames shorter than 19 bytes raise instead of `IndexError`, and are recorded as a poll failure (with back-off and `ble_last_error` / `ble_poll_failures` diagnostics) rather than silently counted as success.
+- **Faster startup for offline devices:** setup no longer blocks up to 30s waiting for an advertisement when state was restored from cached service data.
+- **Cleanup:** removed dead constants and an unused parameter; portability and stale-docstring fixes.
+- **Tests:** added `test_ble_manager.py`, `test_coalesce.py`, `test_coordinator.py`, `test_controller.py`; suite now **44 cases** (was 12).
 
 ### v1.2.2
 
