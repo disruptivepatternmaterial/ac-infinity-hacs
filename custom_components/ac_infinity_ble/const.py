@@ -12,6 +12,14 @@ DEFAULT_PASSIVE_ONLY = False
 DEFAULT_MIN_CONNECT_GAP_SECONDS = 3
 DEFAULT_COMMAND_RETRY_COUNT = 1
 
+# Back-off applied after a failed active poll so a poll that keeps failing does
+# not reconnect on every advertisement (which can arrive several times a
+# second). Capped by the configured poll interval.
+FAILURE_BACKOFF_SECONDS = 30
+# Hard ceiling on a single BLE session (connect + command + disconnect) held
+# under the global lock, so one hung device cannot block every other device.
+BLE_SESSION_TIMEOUT_SECONDS = 60
+
 CONF_POLL_INTERVAL_SECONDS = "poll_interval_seconds"
 CONF_PASSIVE_ONLY = "passive_only"
 CONF_MIN_CONNECT_GAP_SECONDS = "min_connect_gap_seconds"

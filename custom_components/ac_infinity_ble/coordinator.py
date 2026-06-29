@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from datetime import UTC, datetime
 
 from ac_infinity_ble import ACInfinityController
 import async_timeout
@@ -24,7 +23,7 @@ DEVICE_STARTUP_TIMEOUT = 30
 
 
 class ACInfinityDataUpdateCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
-    """Class to manage fetching switchbot data."""
+    """Coordinator that polls and consumes advertisements for one controller."""
 
     def __init__(
         self,
@@ -37,7 +36,7 @@ class ACInfinityDataUpdateCoordinator(ActiveBluetoothDataUpdateCoordinator[None]
         poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS,
         passive_only: bool = False,
     ) -> None:
-        """Initialize global switchbot data updater."""
+        """Initialize the AC Infinity data updater."""
         super().__init__(
             hass=hass,
             logger=logger,
@@ -66,7 +65,6 @@ class ACInfinityDataUpdateCoordinator(ActiveBluetoothDataUpdateCoordinator[None]
         service_info: bluetooth.BluetoothServiceInfoBleak,
         seconds_since_last_poll: float | None,
     ) -> bool:
-        # Passive-first polling: only connect when the device has gone stale/unavailable.
         if self.hass.state != CoreState.running:
             return False
         if self.passive_only:
@@ -76,17 +74,16 @@ class ACInfinityDataUpdateCoordinator(ActiveBluetoothDataUpdateCoordinator[None]
         )
         if not bool(connectable_ble_device):
             return False
+        # Force a poll on first setup and on recovery from "unavailable" so the
+        # fields that never appear in advertisements (work_type / per-port
+        # state) refresh promptly. The flag is cleared in _async_update so this
+        # only fires once per episode.
         if self._was_unavailable:
-            return self.ble_manager.should_poll_now(
-                service_info.device.address,
-                seconds_since_last_poll=seconds_since_last_poll,
-                poll_interval_seconds=self.poll_interval_seconds,
-            )
-        stats = self.ble_manager.stats(service_info.device.address)
-        if stats.last_seen is not None:
-            age = (datetime.now(UTC) - stats.last_seen).total_seconds()
-            if age < self.poll_interval_seconds:
-                return False
+            return True
+        # Otherwise poll on the configured interval, tracked from the last
+        # successful poll (not from advertisement recency, which would suppress
+        # polling entirely while the controller is advertising and leave
+        # multi-port / on-off state frozen).
         return self.ble_manager.should_poll_now(
             service_info.device.address,
             seconds_since_last_poll=seconds_since_last_poll,
@@ -97,6 +94,9 @@ class ACInfinityDataUpdateCoordinator(ActiveBluetoothDataUpdateCoordinator[None]
         self, service_info: bluetooth.BluetoothServiceInfoBleak
     ) -> None:
         """Poll the device."""
+        # Clear the recovery flag before polling so the forced poll is attempted
+        # exactly once; subsequent scheduling falls back to interval/back-off.
+        self._was_unavailable = False
         try:
             await self.controller.update()
         except Exception as err:
@@ -130,7 +130,9 @@ class ACInfinityDataUpdateCoordinator(ActiveBluetoothDataUpdateCoordinator[None]
         self.logger.debug(
             "%s: AC Infinity data: %s", self.ble_device.address, self.controller.state
         )
-        self._was_unavailable = False
+        # NOTE: do not clear self._was_unavailable here. It is cleared in
+        # _async_update so the recovery poll is actually scheduled by
+        # _needs_poll (which super() invokes on this advertisement).
         super()._async_handle_bluetooth_event(service_info, change)
 
     async def async_wait_ready(self) -> bool:

@@ -5,10 +5,14 @@ import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from time import monotonic
 
-from .const import DEFAULT_MIN_CONNECT_GAP_SECONDS
+from .const import (
+    DEFAULT_MIN_CONNECT_GAP_SECONDS,
+    DEFAULT_POLL_INTERVAL_SECONDS,
+    FAILURE_BACKOFF_SECONDS,
+)
 
 
 @dataclass
@@ -74,21 +78,36 @@ class ACInfinityBLEManager:
     def note_advertisement(self, address: str, rssi: int | None) -> None:
         """Update passive diagnostics on advertisement reception."""
         entry = self.stats(address)
-        entry.last_seen = datetime.now(UTC)
+        entry.last_seen = datetime.now(timezone.utc)
         entry.last_rssi = rssi
 
     def note_poll_success(self, address: str) -> None:
         """Update poll scheduling on successful poll."""
         normalized = address.upper()
         entry = self.stats(normalized)
-        interval = self._poll_interval_by_address.get(normalized, 120)
+        interval = self._poll_interval_by_address.get(
+            normalized, DEFAULT_POLL_INTERVAL_SECONDS
+        )
         entry.next_poll_due_monotonic = monotonic() + interval
 
     def note_poll_failure(self, address: str, error: Exception) -> None:
-        """Record poll failure diagnostics."""
-        entry = self.stats(address)
+        """Record poll failure diagnostics and back off the next attempt.
+
+        Without rescheduling, ``next_poll_due_monotonic`` would stay in the past
+        and ``should_poll_now`` would return True on the very next advertisement,
+        producing a reconnect storm. Back off by the smaller of
+        ``FAILURE_BACKOFF_SECONDS`` and the configured poll interval.
+        """
+        normalized = address.upper()
+        entry = self.stats(normalized)
         entry.poll_failures += 1
         entry.last_error = str(error) or error.__class__.__name__
+        interval = self._poll_interval_by_address.get(
+            normalized, DEFAULT_POLL_INTERVAL_SECONDS
+        )
+        entry.next_poll_due_monotonic = monotonic() + min(
+            FAILURE_BACKOFF_SECONDS, interval
+        )
 
     def note_command_failure(self, address: str, error: Exception) -> None:
         """Record command failure diagnostics."""
@@ -110,8 +129,6 @@ class ACInfinityBLEManager:
             stagger = self._stagger_offset_seconds(normalized, poll_interval_seconds)
             entry.next_poll_due_monotonic = now + stagger
             return False
-        if seconds_since_last_poll is None:
-            return now >= entry.next_poll_due_monotonic
         return now >= entry.next_poll_due_monotonic
 
     @staticmethod
