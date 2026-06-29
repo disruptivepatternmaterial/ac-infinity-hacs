@@ -142,8 +142,17 @@ NOT changed (deliberate):
 - Doc note: LAND #3 suggested `.get(type, "Unknown AC Infinity Controller")`; landed code uses
   bare `.get(type)` (model=None), matching the existing multi-port pattern. Intentional.
 
-Still NOT changed (deliberate, from first review): VPD `ATMOSPHERIC_PRESSURE` device_class,
-manifest `connectable: true`, BLE-response `IndexError` guard, 30s offline-startup wait.
+Deferred-list resolution (2026-06-29):
+- BLE-response `IndexError` guard — **LANDED.** `len(data) >= 19` guard before indexing in both
+  `controller.update` and `MultiPortController.update`; short responses log debug and skip.
+- 30s offline-startup wait — **LANDED.** `coordinator.async_wait_ready` returns early when
+  `controller.name` is set (state restored from cache), so offline devices don't stall boot.
+- VPD `ATMOSPHERIC_PRESSURE` device_class — **WON'T FIX.** Changing `device_class` on an existing
+  sensor entity can reset HA long-term statistics for current users; kPa renders correctly under
+  the current class. Cosmetic-only, not worth the stats break.
+- Manifest `connectable: true` — **WON'T FIX (intentional).** Auto-discovery should require a
+  connectable path so a discovered device can actually accept commands; state-only (proxy)
+  controllers can still be added manually. Matches the on-demand-connect command model.
 
 ## Clean areas (per reviewers)
 

@@ -64,7 +64,7 @@ Copy `custom_components/ac_infinity_ble/` to `/config/custom_components/` and re
 - **Write coalescing:** the 5s duplicate-skip cache is recorded only after a successful BLE write, so a failed command can be retried immediately.
 - **No setup crash on controller types 9/12:** `DEVICE_MODEL` lookups use `.get()`.
 - **Bounded BLE session:** each connect/command/disconnect runs under a 60s timeout so a hung device can't hold the global BLE lock indefinitely.
-- **Tests:** added `test_ble_manager.py`, `test_coalesce.py`, `test_coordinator.py`; suite now 35 cases.
+- **Tests:** added `test_ble_manager.py`, `test_coalesce.py`, `test_coordinator.py`; suite now 37 cases.
 
 ### v1.2.2
 
@@ -118,7 +118,7 @@ cd ac-infinity-hacs
 python3 -m pytest tests/ -v
 ```
 
-Requires only `pytest` (HA/upstream libs stubbed in `tests/conftest.py`). **35 tests** cover sensor null/zero passthrough, BLE-manager poll scheduling and failure back-off, fan/light write coalescing (incl. retry-after-failure), and the coordinator poll-gating lifecycle.
+Requires only `pytest` (HA/upstream libs stubbed in `tests/conftest.py`). **37 tests** cover sensor null/zero passthrough, BLE-manager poll scheduling and failure back-off, fan/light write coalescing (incl. retry-after-failure), and the coordinator poll-gating lifecycle and startup-wait shortcut.
 
 Compile check:
 
