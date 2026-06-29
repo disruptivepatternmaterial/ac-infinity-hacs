@@ -101,7 +101,8 @@ class PortAwareController(ACInfinityController):
                 command = self._protocol.get_model_data(
                     self._state.type, self._port, self.sequence
                 )
-                if data := await self._send_command(command):
+                data = await self._send_command(command)
+                if data is not None and len(data) >= 19:
                     self._state.work_type = data[12]
                     self._state.level_off = data[15]
                     self._state.level_on = data[18]
@@ -110,6 +111,12 @@ class PortAwareController(ACInfinityController):
                     if self._state.work_type == 2:
                         self._state.fan = self._state.level_on
                     self._fire_callbacks(CallbackType.UPDATE_RESPONSE)
+                elif data is not None:
+                    _LOGGER.debug(
+                        "%s: short update response (%d bytes), skipping",
+                        self.address,
+                        len(data),
+                    )
             finally:
                 await self._execute_disconnect()
 
@@ -211,11 +218,19 @@ class MultiPortController(PortAwareController):
                 command = self._protocol.get_model_data(
                     self._state.type, port, self.sequence
                 )
-                if data := await self._send_command(command):
+                data = await self._send_command(command)
+                if data is not None and len(data) >= 19:
                     self.port_states[port] = PortState(
                         work_type=data[12],
                         level_off=data[15],
                         level_on=data[18],
+                    )
+                elif data is not None:
+                    _LOGGER.debug(
+                        "%s: short port-%d response (%d bytes), skipping",
+                        self.address,
+                        port,
+                        len(data),
                     )
             finally:
                 await self._execute_disconnect()
