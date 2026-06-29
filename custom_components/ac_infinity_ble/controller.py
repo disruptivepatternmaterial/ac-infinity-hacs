@@ -18,9 +18,10 @@ from __future__ import annotations
 import logging
 
 from ac_infinity_ble import ACInfinityController, CallbackType
+import async_timeout
 
 from .ble_manager import ACInfinityBLEManager
-from .const import DEFAULT_COMMAND_RETRY_COUNT
+from .const import BLE_SESSION_TIMEOUT_SECONDS, DEFAULT_COMMAND_RETRY_COUNT
 from .models import PortState
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,7 +54,8 @@ class PortAwareController(ACInfinityController):
         for attempt in range(1, self._command_retry_count + 1):
             try:
                 async with self._ble_manager.acquire(self.address):
-                    await command_coro()
+                    async with async_timeout.timeout(BLE_SESSION_TIMEOUT_SECONDS):
+                        await command_coro()
                 return
             except Exception as err:  # noqa: BLE001
                 last_error = err
@@ -137,7 +139,7 @@ class PortAwareController(ACInfinityController):
             await self._ensure_connected()
             try:
                 self._state.work_type = 2 if speed > 0 else 1
-                self.state.fan = speed
+                self._state.fan = speed
                 if self._state.work_type == 1:
                     self._state.level_off = speed
                 else:
@@ -162,8 +164,8 @@ class MultiPortController(PortAwareController):
     over a single shared BLE connection (the link is held open for
     ``DISCONNECT_DELAY`` between commands).
 
-    NOTE: the BLE port index is assumed zero-based (cloud "Port N" -> index
-    N-1). This must be verified against the live controller before trusting it.
+    NOTE: the BLE port index is one-based (cloud "Port N" -> BLE byte N),
+    verified live on a Controller 69 Pro (see SPEC.md "Port addressing").
     """
 
     def __init__(self, *args, ports: list[int], **kwargs) -> None:
