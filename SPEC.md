@@ -6,6 +6,31 @@ on 2026-06-15. Where something is not yet implemented it is called out under
 "Known limitations". Do not add claims here that are not verified on a real
 device.
 
+## 2026-06-29 updates (v1.3.0) — review fixes
+
+Landed from the multi-model code review (see `LAND.md`):
+
+- **Active polling no longer suppressed while advertising.** `coordinator._needs_poll`
+  previously short-circuited on advertisement recency (`last_seen` age), which — because
+  `note_advertisement` runs before `super()` in the same callback — meant active polls never
+  fired while the controller advertised. Multi-port `port_states` and single-port `work_type`
+  (neither present in advertisements) were therefore never refreshed. Polling is now gated on
+  the last *successful poll* via `ble_manager.should_poll_now`, with a forced poll on first
+  setup and on recovery from "unavailable".
+- **Poll-failure back-off.** `ble_manager.note_poll_failure` now sets
+  `next_poll_due_monotonic = now + min(FAILURE_BACKOFF_SECONDS=30, interval)` so a failing poll
+  cannot reconnect on every advertisement.
+- **Write coalescing no longer drops failed retries.** Fan/light entities record the coalesce
+  signature only *after* a successful BLE write (`_is_duplicate_write` + `_record_write`); a
+  write that raises leaves the cache untouched so an immediate identical retry is still sent.
+- **No KeyError on controller types 9/12.** `sensor.py`/`fan.py` use `DEVICE_MODEL.get(type)`
+  (previously direct indexing) so VPD-capable types not in `DEVICE_MODEL` don't crash setup.
+- **Bounded BLE session.** `controller._run_with_retries` wraps each session in
+  `async_timeout(BLE_SESSION_TIMEOUT_SECONDS=60)` so one hung device can't hold the global BLE
+  lock indefinitely.
+- **Tests:** `tests/test_ble_manager.py` (scheduling/back-off) + `tests/test_coalesce.py`
+  (skip-on-failure) added; suite now 25 pytest cases.
+
 ## 2026-06-24 updates (v1.2.1+)
 
 - **Sensor data fidelity:** `sensor.py` reads `device.state.tmp/hum/vpd` directly instead of
@@ -106,8 +131,12 @@ Verified on a Controller 69 Pro (choose_port = 1):
   is in the manufacturer data). This matters because the controller is often
   only heard via a non-connectable proxy; a `connectable=True` registration
   ignored those and the UI froze between polls.
-- Commands (`set_speed`/`turn_on`/`turn_off`) and the 30s poll still need a
-  connectable link, established on demand via `bleak_retry_connector`.
+- Commands (`set_speed`/`turn_on`/`turn_off`) and the active poll still need a
+  connectable link, established on demand via `bleak_retry_connector`. The
+  active poll runs on `poll_interval_seconds` (default 120), scheduled from the
+  last *successful* poll — not from advertisement recency — plus a forced poll
+  on first setup and on recovery from "unavailable". A failed poll backs off by
+  `min(FAILURE_BACKOFF_SECONDS=30, poll_interval_seconds)`.
 - `fan` on/off (`is_on`) derives from `work_type`, which is **not** in
   advertisements (only set by commands and polls). So on/off is correct
   immediately after a command (optimistic write) and refreshed each poll;
@@ -132,12 +161,14 @@ Design:
   ]
   ```
 - `controller.py::MultiPortController` keeps a `port_states: dict[int,
-  PortState]` and reads each configured port in **its own** connect/disconnect
-  cycle (`get_model_data(type, port, seq)`, one command per connection). The
-  controller answers only the first command per BLE connection, so batching all
-  ports into one session times out every read after the first
-  (`CancelledError`) and fails the whole poll — reconnect per port instead.
-  Writes go to a single port via `set_port_level(port, work_type, level)`.
+  PortState]` and reads **one port per active poll cycle in round-robin order**,
+  each in its own connect/disconnect cycle (`get_model_data(type, port, seq)`,
+  one command per connection). The controller answers only the first command per
+  BLE connection, so batching all ports into one session times out every read
+  after the first (`CancelledError`) and fails the whole poll — reconnect per
+  port instead. With N ports and interval T, each port's state refreshes about
+  every N×T seconds. Writes go to a single port via
+  `set_port_level(port, work_type, level)`.
 - `fan.py::ACInfinityPortFan` and `light.py::ACInfinityGrowLight` each bind to
   a fixed port index (not `choose_port`). `__init__.py` selects
   `MultiPortController` + the FAN/LIGHT/SENSOR platforms when a port map exists.

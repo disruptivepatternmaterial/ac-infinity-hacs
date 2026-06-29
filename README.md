@@ -58,6 +58,14 @@ Copy `custom_components/ac_infinity_ble/` to `/config/custom_components/` and re
 
 ## Changelog (NET Fork)
 
+### v1.3.0 (unreleased) — multi-model review fixes
+
+- **Polling fix:** active polls are scheduled from the last successful poll (not advertisement recency), so multi-port `port_states` and single-port on/off (`work_type`) refresh on `poll_interval_seconds` again instead of staying frozen while the controller advertises. Forced poll on setup/recovery; failed polls back off `min(30s, interval)`.
+- **Write coalescing:** the 5s duplicate-skip cache is recorded only after a successful BLE write, so a failed command can be retried immediately.
+- **No setup crash on controller types 9/12:** `DEVICE_MODEL` lookups use `.get()`.
+- **Bounded BLE session:** each connect/command/disconnect runs under a 60s timeout so a hung device can't hold the global BLE lock indefinitely.
+- **Tests:** added `test_ble_manager.py` + `test_coalesce.py`; suite now 25 cases.
+
 ### v1.2.2
 
 - **README:** full NET Fork install/deploy docs, changelog, tests, HACS naming
