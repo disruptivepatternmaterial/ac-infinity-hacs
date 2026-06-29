@@ -51,6 +51,30 @@ _mod("homeassistant.const",
      UnitOfTemperature=MagicMock(), UnitOfPressure=MagicMock(),
 )
 _mod("homeassistant.core", HomeAssistant=MagicMock, callback=lambda f: f)
+
+
+# Minimal real implementations of the percentage helpers used by fan.py so the
+# coalescing tests exercise the real speed conversion.
+def _int_states_in_range(low_high):
+    low, high = low_high
+    return high - low + 1
+
+
+def _ranged_value_to_percentage(low_high, value):
+    low, high = low_high
+    return value / (high - low + 1) * 100
+
+
+def _percentage_to_ranged_value(low_high, percentage):
+    low, high = low_high
+    return (high - low + 1) * percentage / 100
+
+
+_mod("homeassistant.util")
+_mod("homeassistant.util.percentage",
+     int_states_in_range=_int_states_in_range,
+     ranged_value_to_percentage=_ranged_value_to_percentage,
+     percentage_to_ranged_value=_percentage_to_ranged_value)
 _mod("homeassistant.helpers")
 _mod("homeassistant.helpers.device_registry", CONNECTION_BLUETOOTH="bluetooth")
 _mod("homeassistant.helpers.entity", DeviceInfo=dict, EntityCategory=MagicMock())
@@ -72,8 +96,10 @@ _mod("homeassistant.components.bluetooth.passive_update_coordinator",
      PassiveBluetoothCoordinatorEntity=_Generic)
 _mod("homeassistant.components.sensor",
      SensorDeviceClass=MagicMock(), SensorEntity=object, SensorStateClass=MagicMock())
-_mod("homeassistant.components.light")
-_mod("homeassistant.components.fan")
+_mod("homeassistant.components.light",
+     ATTR_BRIGHTNESS="brightness", ColorMode=MagicMock(), LightEntity=object)
+_mod("homeassistant.components.fan",
+     FanEntity=object, FanEntityFeature=MagicMock())
 _mod("homeassistant.components.number")
 
 # ---------------------------------------------------------------------------
@@ -91,19 +117,19 @@ _pkg.__package__ = "custom_components.ac_infinity_ble"
 
 _mod("custom_components.ac_infinity_ble.const",
      DOMAIN="ac_infinity_ble", DEVICE_MODEL={}, CONF_PORTS="ports",
-     PORT_KIND_LIGHT="light", CONF_COMMAND_RETRY_COUNT="retry_count",
+     PORT_KIND_FAN="fan", PORT_KIND_LIGHT="light", PORT_LEVEL_MAX=10,
+     WRITE_COALESCE_SECONDS=5, CONF_COMMAND_RETRY_COUNT="retry_count",
      CONF_MIN_CONNECT_GAP_SECONDS="gap", CONF_PASSIVE_ONLY="passive",
      CONF_POLL_INTERVAL_SECONDS="poll", DEFAULT_COMMAND_RETRY_COUNT=1,
-     DEFAULT_MIN_CONNECT_GAP_SECONDS=2, DEFAULT_PASSIVE_ONLY=False,
-     DEFAULT_POLL_INTERVAL_SECONDS=120,
+     DEFAULT_MIN_CONNECT_GAP_SECONDS=3, DEFAULT_PASSIVE_ONLY=False,
+     DEFAULT_POLL_INTERVAL_SECONDS=120, FAILURE_BACKOFF_SECONDS=30,
+     BLE_SESSION_TIMEOUT_SECONDS=60,
 )
-_mod("custom_components.ac_infinity_ble.ble_manager", ACInfinityBLEManager=MagicMock)
 _mod("custom_components.ac_infinity_ble.coordinator",
      ACInfinityDataUpdateCoordinator=MagicMock)
-_mod("custom_components.ac_infinity_ble.models", ACInfinityData=MagicMock)
+_mod("custom_components.ac_infinity_ble.models",
+     ACInfinityData=MagicMock, PortConfig=MagicMock, PortState=MagicMock)
 _mod("custom_components.ac_infinity_ble.controller",
      MultiPortController=MagicMock, PortAwareController=MagicMock)
-_mod("custom_components.ac_infinity_ble.fan")
-_mod("custom_components.ac_infinity_ble.light")
 _mod("custom_components.ac_infinity_ble.number")
 _mod("custom_components.ac_infinity_ble.options_flow")
