@@ -1,4 +1,4 @@
-"""The led ble integration models."""
+"""Data models for the AC Infinity BLE integration."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field

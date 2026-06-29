@@ -90,17 +90,17 @@ class ACInfinityGrowLight(
     def _port_state(self):
         return self._device.port_states.get(self._port)
 
-    def _should_skip_duplicate_write(self, work_type: int, level: int) -> bool:
-        now = monotonic()
-        signature = (work_type, level)
-        if (
-            self._last_write_signature == signature
-            and now - self._last_write_at <= WRITE_COALESCE_SECONDS
-        ):
-            return True
-        self._last_write_signature = signature
-        self._last_write_at = now
-        return False
+    def _is_duplicate_write(self, work_type: int, level: int) -> bool:
+        """Return True if an identical command was written within the window."""
+        return (
+            self._last_write_signature == (work_type, level)
+            and monotonic() - self._last_write_at <= WRITE_COALESCE_SECONDS
+        )
+
+    def _record_write(self, work_type: int, level: int) -> None:
+        """Record a successful write so rapid duplicates are coalesced."""
+        self._last_write_signature = (work_type, level)
+        self._last_write_at = monotonic()
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the grow light, optionally at a brightness."""
@@ -109,17 +109,19 @@ class ACInfinityGrowLight(
         else:
             state = self._port_state()
             level = (state.level_on if state else None) or PORT_LEVEL_MAX
-        if self._should_skip_duplicate_write(2, level):
+        if self._is_duplicate_write(2, level):
             return
         await self._device.set_port_level(self._port, 2, level)
+        self._record_write(2, level)
         self._async_update_attrs()
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the grow light."""
-        if self._should_skip_duplicate_write(1, 0):
+        if self._is_duplicate_write(1, 0):
             return
         await self._device.set_port_level(self._port, 1, 0)
+        self._record_write(1, 0)
         self._async_update_attrs()
         self.async_write_ha_state()
 

@@ -31,7 +31,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the light platform for LEDBLE."""
+    """Set up the AC Infinity sensor platform."""
     data: ACInfinityData = hass.data[DOMAIN][entry.entry_id]
     entities = [
         TemperatureSensor(data.coordinator, data.device, entry.title),
@@ -62,10 +62,9 @@ class ACInfinitySensor(
         """Initialize an AC Infinity sensor."""
         super().__init__(coordinator)
         self._device = device
-        self._name = name
         self._attr_device_info = DeviceInfo(
             name=device.name,
-            model=DEVICE_MODEL[device.state.type],
+            model=DEVICE_MODEL.get(device.state.type),
             manufacturer="AC Infinity",
             sw_version=str(device.state.version),
             connections={(dr.CONNECTION_BLUETOOTH, device.address)},

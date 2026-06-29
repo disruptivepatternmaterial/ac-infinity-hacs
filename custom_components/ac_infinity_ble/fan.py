@@ -74,7 +74,7 @@ class ACInfinityFan(
         self._attr_unique_id = f"{self._device.address}_fan"
         self._attr_device_info = DeviceInfo(
             name=device.name,
-            model=DEVICE_MODEL[device.state.type],
+            model=DEVICE_MODEL.get(device.state.type),
             manufacturer="AC Infinity",
             sw_version=str(device.state.version),
             connections={(dr.CONNECTION_BLUETOOTH, device.address)},
@@ -83,16 +83,17 @@ class ACInfinityFan(
         self._last_write_at = 0.0
         self._async_update_attrs()
 
-    def _should_skip_duplicate_write(self, speed: int) -> bool:
-        now = monotonic()
-        if (
+    def _is_duplicate_write(self, speed: int) -> bool:
+        """Return True if an identical speed was written within the window."""
+        return (
             self._last_write_speed == speed
-            and now - self._last_write_at <= WRITE_COALESCE_SECONDS
-        ):
-            return True
+            and monotonic() - self._last_write_at <= WRITE_COALESCE_SECONDS
+        )
+
+    def _record_write(self, speed: int) -> None:
+        """Record a successful write so rapid duplicates are coalesced."""
         self._last_write_speed = speed
-        self._last_write_at = now
-        return False
+        self._last_write_at = monotonic()
 
     async def async_set_percentage(self, percentage: int) -> None:
         """Set the speed of the fan, as a percentage."""
@@ -100,9 +101,10 @@ class ACInfinityFan(
         if percentage > 0:
             speed = math.ceil(percentage_to_ranged_value(SPEED_RANGE, percentage))
 
-        if self._should_skip_duplicate_write(speed):
+        if self._is_duplicate_write(speed):
             return
         await self._device.set_speed(speed)
+        self._record_write(speed)
         self._async_update_attrs()
         self.async_write_ha_state()
 
@@ -116,17 +118,20 @@ class ACInfinityFan(
         speed = None
         if percentage is not None:
             speed = math.ceil(percentage_to_ranged_value(SPEED_RANGE, percentage))
-            if self._should_skip_duplicate_write(speed):
+            if self._is_duplicate_write(speed):
                 return
         await self._device.turn_on(speed)
+        if speed is not None:
+            self._record_write(speed)
         self._async_update_attrs()
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the fan."""
-        if self._should_skip_duplicate_write(0):
+        if self._is_duplicate_write(0):
             return
         await self._device.turn_off()
+        self._record_write(0)
         self._async_update_attrs()
         self.async_write_ha_state()
 
@@ -195,29 +200,31 @@ class ACInfinityPortFan(
     def _port_state(self):
         return self._device.port_states.get(self._port)
 
-    def _should_skip_duplicate_write(self, work_type: int, level: int) -> bool:
-        now = monotonic()
-        signature = (work_type, level)
-        if (
-            self._last_write_signature == signature
-            and now - self._last_write_at <= WRITE_COALESCE_SECONDS
-        ):
-            return True
-        self._last_write_signature = signature
-        self._last_write_at = now
-        return False
+    def _is_duplicate_write(self, work_type: int, level: int) -> bool:
+        """Return True if an identical command was written within the window."""
+        return (
+            self._last_write_signature == (work_type, level)
+            and monotonic() - self._last_write_at <= WRITE_COALESCE_SECONDS
+        )
+
+    def _record_write(self, work_type: int, level: int) -> None:
+        """Record a successful write so rapid duplicates are coalesced."""
+        self._last_write_signature = (work_type, level)
+        self._last_write_at = monotonic()
 
     async def async_set_percentage(self, percentage: int) -> None:
         """Set the speed of this port, as a percentage."""
         if percentage <= 0:
-            if self._should_skip_duplicate_write(1, 0):
+            if self._is_duplicate_write(1, 0):
                 return
             await self._device.set_port_level(self._port, 1, 0)
+            self._record_write(1, 0)
         else:
             speed = math.ceil(percentage_to_ranged_value(SPEED_RANGE, percentage))
-            if self._should_skip_duplicate_write(2, speed):
+            if self._is_duplicate_write(2, speed):
                 return
             await self._device.set_port_level(self._port, 2, speed)
+            self._record_write(2, speed)
         self._async_update_attrs()
         self.async_write_ha_state()
 
@@ -233,17 +240,19 @@ class ACInfinityPortFan(
         else:
             state = self._port_state()
             speed = (state.level_on if state else None) or 10
-        if self._should_skip_duplicate_write(2, speed):
+        if self._is_duplicate_write(2, speed):
             return
         await self._device.set_port_level(self._port, 2, speed)
+        self._record_write(2, speed)
         self._async_update_attrs()
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off this port."""
-        if self._should_skip_duplicate_write(1, 0):
+        if self._is_duplicate_write(1, 0):
             return
         await self._device.set_port_level(self._port, 1, 0)
+        self._record_write(1, 0)
         self._async_update_attrs()
         self.async_write_ha_state()
 
