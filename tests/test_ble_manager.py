@@ -32,6 +32,17 @@ class TestPollFailureBackoff:
         m.note_poll_failure(ADDR, TimeoutError())
         assert m.stats(ADDR).last_error == "TimeoutError"
 
+    def test_long_error_truncated_to_ha_state_limit(self):
+        """HA rejects states >255 chars; last_error feeds a sensor state."""
+        m = _manager()
+        m.note_poll_failure(ADDR, RuntimeError("x" * 1000))
+        assert len(m.stats(ADDR).last_error) == 255
+
+    def test_command_failure_error_truncated(self):
+        m = _manager()
+        m.note_command_failure(ADDR, RuntimeError("y" * 1000))
+        assert len(m.stats(ADDR).last_error) == 255
+
     def test_failure_schedules_backoff_capped_by_interval(self):
         # interval (5) smaller than FAILURE_BACKOFF_SECONDS (30) -> capped at 5
         m = _manager(interval=5)

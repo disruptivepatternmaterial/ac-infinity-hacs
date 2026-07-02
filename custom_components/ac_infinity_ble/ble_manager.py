@@ -14,6 +14,15 @@ from .const import (
     FAILURE_BACKOFF_SECONDS,
 )
 
+# HA rejects entity states longer than 255 characters; last_error is surfaced
+# by BLELastErrorSensor, so cap it at the source.
+MAX_ERROR_STATE_LENGTH = 255
+
+
+def _error_text(error: Exception) -> str:
+    """Render an exception for the last_error diagnostic, bounded for HA state."""
+    return (str(error) or error.__class__.__name__)[:MAX_ERROR_STATE_LENGTH]
+
 
 @dataclass
 class BLEDeviceStats:
@@ -101,7 +110,7 @@ class ACInfinityBLEManager:
         normalized = address.upper()
         entry = self.stats(normalized)
         entry.poll_failures += 1
-        entry.last_error = str(error) or error.__class__.__name__
+        entry.last_error = _error_text(error)
         interval = self._poll_interval_by_address.get(
             normalized, DEFAULT_POLL_INTERVAL_SECONDS
         )
@@ -112,7 +121,7 @@ class ACInfinityBLEManager:
     def note_command_failure(self, address: str, error: Exception) -> None:
         """Record command failure diagnostics."""
         entry = self.stats(address)
-        entry.last_error = str(error) or error.__class__.__name__
+        entry.last_error = _error_text(error)
 
     def should_poll_now(
         self,
