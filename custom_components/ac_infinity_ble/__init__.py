@@ -16,7 +16,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 
 from .ble_manager import ACInfinityBLEManager
-from .const import CONF_PORTS, DOMAIN, PORT_KIND_LIGHT
+from .const import CONF_PORTS, DOMAIN, PORT_CAPABLE_TYPES, PORT_KIND_LIGHT
 from .const import (
     CONF_COMMAND_RETRY_COUNT,
     CONF_MIN_CONNECT_GAP_SECONDS,
@@ -35,8 +35,12 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _read_ports(entry: ConfigEntry) -> list[PortConfig]:
-    """Read the per-port map from an entry's options or data, if present."""
-    raw = entry.options.get(CONF_PORTS) or entry.data.get(CONF_PORTS) or []
+    """Read the per-port map from an entry's options or data, if present.
+
+    Presence-based (options first, then data) so an explicit empty list in
+    options clears a port map stored in data instead of falling through to it.
+    """
+    raw = _read_entry_option(entry, CONF_PORTS, []) or []
     return [PortConfig(**p) for p in raw]
 
 
@@ -66,6 +70,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     ports = _read_ports(entry)
+    if ports and device_info.type not in PORT_CAPABLE_TYPES:
+        # The protocol drops the port byte for these types, so per-port
+        # entities would all drive the same load. Refuse the map loudly.
+        _LOGGER.warning(
+            "%s: device type %s does not support per-port addressing; "
+            "ignoring configured ports %s and using single-port control",
+            address,
+            device_info.type,
+            [p.port for p in ports],
+        )
+        ports = []
     command_retry_count = int(
         _read_entry_option(entry, CONF_COMMAND_RETRY_COUNT, DEFAULT_COMMAND_RETRY_COUNT)
     )
