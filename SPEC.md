@@ -32,10 +32,11 @@ Landed from the multi-model code review (see `LAND.md`):
   `async_timeout(DISCONNECT_TIMEOUT_SECONDS=10)` and never propagates, so a hung disconnect
   cannot keep holding the lock either.
 - **Robust to short BLE responses.** `controller.update` / `MultiPortController.update` guard
-  `len(data) >= MIN_MODEL_DATA_LEN (19)` before indexing `data[12/15/18]`. A `None` response is a
-  benign no-op; a non-empty but truncated/corrupt frame raises `InvalidResponseError` instead of
-  `IndexError`, which the coordinator records as a poll failure (`ble_last_error` /
-  `ble_poll_failures`) and backs off, rather than silently counting it as a successful poll.
+  `len(data) >= MIN_MODEL_DATA_LEN (19)` before indexing `data[12/15/18]`. A `None` response
+  (unreachable with pinned ac-infinity-ble 0.4.3, which returns bytes or raises) and a non-empty
+  but truncated/corrupt frame both raise `InvalidResponseError` instead of `IndexError`, which
+  the coordinator records as a poll failure (`ble_last_error` / `ble_poll_failures`) and backs
+  off, rather than silently counting it as a successful poll.
 - **No 30s boot stall for offline devices.** `coordinator.async_wait_ready` returns immediately
   when `controller.name` is already populated (state restored from cached service data), instead
   of blocking HA startup up to `DEVICE_STARTUP_TIMEOUT` waiting for an advertisement; it logs at

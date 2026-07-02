@@ -199,6 +199,39 @@ Findings from a fresh full-repo review (verified against upstream ac-infinity-bl
 Tests: 46 pytest cases green after this pass (44 + 2 truncation tests; the None-response
 no-op test was converted to a raises test in place).
 
+## Fifth pass (2026-07-02) — 4-model re-review panel, all accepted findings LANDED
+
+Panel: GPT-5.5, Opus 4.8, GPT-5.3 Codex, Sonnet 5 (each independently ran the suite: 46 green).
+
+- WARNING (2/4) — SPEC.md still said a `None` response is "a benign no-op" after the fourth-pass
+  code change made it raise. **LANDED:** SPEC.md corrected (aspirational-doc violation).
+- WARNING (4/4) — the fourth-pass fixes (options merge, unload platforms) and the multi-port
+  `None` path had zero real test coverage (conftest stubbed `options_flow` and the package
+  `__init__`). **LANDED:** conftest un-stubs `options_flow` (adds `OptionsFlow`/`FlowResult`
+  stubs); new `tests/test_options_flow.py` and `tests/test_setup_entry.py` (loads the real
+  `__init__.py` via importlib); multi-port `None` test added to `tests/test_controller.py`.
+- WARNING (1/4, Codex) — `_read_ports` `or`-chain meant an explicit `ports: []` in options fell
+  through to `entry.data`, making a port map impossible to clear. **LANDED:** presence-based
+  lookup via `_read_entry_option`; covered by tests.
+- CONSIDER (1/4, Sonnet) — upstream `protocol.py` only puts the port byte on the wire for types
+  {7, 9, 11, 12}; a `CONF_PORTS` map on any other type would silently drive one load from N
+  entities. **LANDED:** `PORT_CAPABLE_TYPES` guard in `async_setup_entry` refuses the map with a
+  warning and falls back to single-port control.
+- CONSIDER (1/4, Opus) — fan/light fabricated 0%/off when a reading was never observed,
+  against the data-fidelity rule. **LANDED:** unknown (`state.fan is None`, or per-port
+  `work_type is None`) now reports `None` (HA "unknown"); a real 0 still reads 0. Covered by
+  `tests/test_entity_attrs.py`.
+- CONSIDER (1/4, Sonnet) — manifest still 1.3.0 though behavioral fixes landed; README deploy
+  checklist couldn't distinguish builds. **LANDED:** version 1.3.1, checklist + changelog updated.
+- DISMISSED — unload `KeyError` when entry_id absent from `hass.data` (Opus): HA only unloads
+  entries that completed setup; not reachable in production.
+- NOTED (no code change) — upstream `_ensure_connected` sets `self._client` before
+  `start_notify`; a notify failure leaves a connected-but-unsubscribed client that self-heals on
+  the next cycle's `finally` disconnect (one ~5s notify timeout). Upstream 0.4.3 behavior, out of
+  fork scope.
+
+Tests: 64 pytest cases green after this pass.
+
 ## Clean areas (per reviewers)
 
 Sensor null/zero fidelity + its tests, domain-rename wiring (`ac_infinity_ble` consistent),
