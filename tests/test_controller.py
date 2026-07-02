@@ -86,12 +86,14 @@ class TestSinglePortUpdate:
         c._fire_callbacks.assert_not_called()
         c._raw_disconnect.assert_awaited()  # finally still disconnects
 
-    def test_none_response_is_noop(self):
+    def test_none_response_raises(self):
         c = _make_single()
         c._send_command = AsyncMock(return_value=None)
-        asyncio.run(c.update())
+        with pytest.raises(InvalidResponseError):
+            asyncio.run(c.update())
         assert c._state.work_type is None
         c._fire_callbacks.assert_not_called()
+        c._raw_disconnect.assert_awaited()
 
 
 class TestMultiPortUpdate:
