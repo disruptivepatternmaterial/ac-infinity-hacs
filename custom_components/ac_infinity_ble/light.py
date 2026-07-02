@@ -129,8 +129,14 @@ class ACInfinityGrowLight(
     def _async_update_attrs(self) -> None:
         """Handle updating _attr values."""
         state = self._port_state()
-        self._attr_is_on = bool(state and state.is_on)
-        level = state.level if state else 0
+        if state is None or state.work_type is None:
+            # Port never polled or commanded (MultiPortController seeds an
+            # empty PortState per port): unknown, not off/0 brightness.
+            self._attr_is_on = None
+            self._attr_brightness = None
+            return
+        self._attr_is_on = state.is_on
+        level = state.level
         self._attr_brightness = _level_to_brightness(level) if level > 0 else 0
 
     @callback
