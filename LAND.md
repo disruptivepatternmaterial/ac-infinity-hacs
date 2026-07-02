@@ -94,7 +94,8 @@ Implementation summary:
   length guard. (Gemini)
 - Options flow may drop `CONF_PORTS` — `options_flow.py:33`; safe only because `_read_ports`
   falls back to `entry.data` (ports must not live in `entry.options`). Low risk as configured.
-  (GPT-5.5; Opus disagrees it's a live bug)
+  (GPT-5.5; Opus disagrees it's a live bug) **RESOLVED 2026-07-02:** the options flow now
+  merges `{**entry.options, **user_input}` so non-form keys survive a save.
 
 ---
 
@@ -162,9 +163,10 @@ Panel: Opus 4.8, GPT-5.3 Codex, Sonnet 4.6, GPT-5.5. No criticals; consensus fol
 
 - (4/4) Short response counted as a successful poll -> stale state, no telemetry/back-off.
   **LANDED.** Non-empty frames shorter than `MIN_MODEL_DATA_LEN (19)` now raise
-  `InvalidResponseError`, which the coordinator records as a poll failure and backs off; a `None`
-  response stays a benign no-op. `controller.py`. (Also moved `MultiPortController` callback to
-  fire only on a valid frame.)
+  `InvalidResponseError`, which the coordinator records as a poll failure and backs off.
+  `controller.py`. (Also moved `MultiPortController` callback to fire only on a valid frame.)
+  (2026-07-02: a `None` response — unreachable with pinned 0.4.3, which returns bytes or
+  raises — now also raises `InvalidResponseError` instead of counting as a successful poll.)
 - (4/4) New `controller.py` paths untested (module was stubbed). **LANDED.** conftest now provides
   a real fake upstream base and imports the real controller/models; `tests/test_controller.py`
   covers valid/short/None responses for both controllers and the disconnect override's
@@ -176,6 +178,26 @@ Panel: Opus 4.8, GPT-5.3 Codex, Sonnet 4.6, GPT-5.5. No criticals; consensus fol
 Known test-harness limitation (acceptable): the disconnect 10s ceiling itself isn't asserted
 because conftest stubs `async_timeout.timeout` as a no-op; the swallow/propagate branches are
 covered instead. HA runs real `async_timeout`.
+
+## Fourth pass (2026-07-02) — single-reviewer sweep, all LANDED
+
+Findings from a fresh full-repo review (verified against upstream ac-infinity-ble 0.4.3 source):
+
+- Medium — `MultiPortController` docstring claimed the link is "held open for DISCONNECT_DELAY
+  between commands"; every command path disconnects in `finally`. Docstring corrected to match
+  the per-command connect/disconnect reality (SPEC.md was already correct). `controller.py`.
+- Medium — `last_error` fed `BLELastErrorSensor` unbounded; HA rejects states >255 chars.
+  Now truncated at the source (`_error_text`, `MAX_ERROR_STATE_LENGTH=255`). `ble_manager.py`.
+- Low — options flow replaced options wholesale (could drop `CONF_PORTS`); now merges (above).
+- Low — `async_unload_entry` recomputed platforms from current entry data, which could drift
+  from what was set up. The setup-time platform list is now stored on `ACInfinityData.platforms`
+  and used for unload. `__init__.py`, `models.py`.
+- Info — `None` update response folded into `InvalidResponseError` (above).
+- Doc — AUTO/TIMER/CYCLE/SCHEDULE/VPD/AI modes (work_type 3-12) read as "off" and any HA write
+  clobbers them to plain ON/OFF; documented in SPEC.md "Known limitations".
+
+Tests: 46 pytest cases green after this pass (44 + 2 truncation tests; the None-response
+no-op test was converted to a raises test in place).
 
 ## Clean areas (per reviewers)
 

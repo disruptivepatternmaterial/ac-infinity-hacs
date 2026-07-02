@@ -124,7 +124,7 @@ cd ac-infinity-hacs
 python3 -m pytest tests/ -v
 ```
 
-Requires only `pytest` (HA/upstream libs stubbed in `tests/conftest.py`). **44 tests** cover sensor null/zero passthrough, BLE-manager poll scheduling and failure back-off, fan/light write coalescing (incl. retry-after-failure), the coordinator poll-gating lifecycle and startup-wait shortcut, and the controller short-response guard and bounded disconnect.
+Requires only `pytest` (HA/upstream libs stubbed in `tests/conftest.py`). **46 tests** cover sensor null/zero passthrough, BLE-manager poll scheduling and failure back-off, fan/light write coalescing (incl. retry-after-failure), the coordinator poll-gating lifecycle and startup-wait shortcut, and the controller short-response guard and bounded disconnect.
 
 Compile check:
 

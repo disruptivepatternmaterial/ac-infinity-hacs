@@ -221,6 +221,14 @@ Verification (live G-622UC, 2026-06-15, library logger at debug):
   this issue.
 - Multi-port light scheduling depends on Node-RED/HA (the controller's
   on-device schedule does not run while in BLE mode).
+- Only ON/OFF modes are modeled. The device's `work_type` can be 3-12 (AUTO,
+  TIMER, CYCLE, SCHEDULE, VPD, AI — see upstream `protocol.get_mode`), but
+  `is_on`/`PortState.level` treat anything other than 2 as off, so a port
+  running under AUTO reads as off/0%. Any HA write sends `set_level` with
+  work_type 1 or 2 (the only values the protocol accepts), replacing the
+  device-side mode with plain ON/OFF. Verify in code:
+  `models.py::PortState.is_on` and `protocol.set_level`'s
+  `work_type not in [1, 2]` guard in ac-infinity-ble 0.4.3.
 
 ## Verification commands
 
