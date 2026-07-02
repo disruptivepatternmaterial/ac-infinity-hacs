@@ -115,6 +115,15 @@ class TestMultiPortUpdate:
         c._fire_callbacks.assert_not_called()
         assert c.port_states[1].work_type is None
 
+    def test_none_response_raises(self):
+        c = _make_multi()
+        c._send_command = AsyncMock(return_value=None)
+        with pytest.raises(InvalidResponseError):
+            asyncio.run(c.update())
+        c._fire_callbacks.assert_not_called()
+        assert c.port_states[1].work_type is None
+        c._raw_disconnect.assert_awaited()
+
 
 class TestExecuteDisconnect:
     def test_swallows_disconnect_error(self):
