@@ -73,7 +73,8 @@ _mod("ac_infinity_ble",
 # Home Assistant
 # ---------------------------------------------------------------------------
 _mod("homeassistant", HomeAssistant=MagicMock)
-_mod("homeassistant.config_entries", ConfigEntry=MagicMock)
+_mod("homeassistant.config_entries", ConfigEntry=MagicMock, OptionsFlow=object)
+_mod("homeassistant.data_entry_flow", FlowResult=dict)
 _mod("homeassistant.const",
      CONF_ADDRESS="address", CONF_SERVICE_DATA="service_data",
      Platform=MagicMock(), PERCENTAGE="%", SIGNAL_STRENGTH_DECIBELS_MILLIWATT="dBm",
@@ -163,4 +164,3 @@ _mod("custom_components.ac_infinity_ble.const",
      BLE_SESSION_TIMEOUT_SECONDS=60, DISCONNECT_TIMEOUT_SECONDS=10,
 )
 _mod("custom_components.ac_infinity_ble.number")
-_mod("custom_components.ac_infinity_ble.options_flow")
