@@ -109,7 +109,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     hass.data[DOMAIN][entry.entry_id] = ACInfinityData(
-        entry.title, controller, coordinator, ports
+        entry.title, controller, coordinator, ports, platforms
     )
 
     entry.async_on_unload(coordinator.async_start())
@@ -125,17 +125,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-def _entry_platforms(entry: ConfigEntry) -> list[Platform]:
-    """Recompute the platform list an entry was set up with."""
-    ports = _read_ports(entry)
-    if not ports:
-        return [Platform.SENSOR, Platform.FAN]
-    platforms = [Platform.FAN, Platform.SENSOR]
-    if any(p.kind == PORT_KIND_LIGHT for p in ports):
-        platforms.append(Platform.LIGHT)
-    return platforms
-
-
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle options update."""
     await hass.config_entries.async_reload(entry.entry_id)
@@ -143,8 +132,12 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    platforms = _entry_platforms(entry)
-    if unload_ok := await hass.config_entries.async_unload_platforms(entry, platforms):
+    # Use the platform list recorded at setup, not one recomputed from the
+    # entry's current data/options, which may have changed since setup.
+    data: ACInfinityData = hass.data[DOMAIN][entry.entry_id]
+    if unload_ok := await hass.config_entries.async_unload_platforms(
+        entry, data.platforms
+    ):
         ble_manager: ACInfinityBLEManager = hass.data[DOMAIN]["ble_manager"]
         ble_manager.clear_address(entry.data[CONF_ADDRESS])
         hass.data[DOMAIN].pop(entry.entry_id)
