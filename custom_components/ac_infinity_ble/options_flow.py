@@ -31,7 +31,12 @@ class ACInfinityOptionsFlow(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Show and process options form."""
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            # Merge over existing options instead of replacing them wholesale,
+            # so keys not on this form (e.g. a manually-added CONF_PORTS list)
+            # survive an options save.
+            return self.async_create_entry(
+                title="", data={**self._config_entry.options, **user_input}
+            )
 
         schema = vol.Schema(
             {
