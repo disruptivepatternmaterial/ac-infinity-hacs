@@ -111,7 +111,20 @@ _mod("homeassistant.util.percentage",
      ranged_value_to_percentage=_ranged_value_to_percentage,
      percentage_to_ranged_value=_percentage_to_ranged_value)
 _mod("homeassistant.helpers")
-_mod("homeassistant.helpers.device_registry", CONNECTION_BLUETOOTH="bluetooth")
+_dr = _mod(
+    "homeassistant.helpers.device_registry",
+    CONNECTION_BLUETOOTH="bluetooth",
+    async_get=MagicMock(),
+    DeviceEntry=MagicMock,
+)
+_er = _mod(
+    "homeassistant.helpers.entity_registry",
+    async_get=MagicMock(),
+    async_entries_for_config_entry=MagicMock(return_value=[]),
+)
+# Ensure `from homeassistant.helpers import device_registry` resolves.
+sys.modules["homeassistant.helpers"].device_registry = _dr
+sys.modules["homeassistant.helpers"].entity_registry = _er
 _mod("homeassistant.helpers.entity", DeviceInfo=dict, EntityCategory=MagicMock())
 _mod("homeassistant.helpers.entity_platform", AddEntitiesCallback=MagicMock)
 _mod("homeassistant.helpers.update_coordinator",

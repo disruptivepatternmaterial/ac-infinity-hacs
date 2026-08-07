@@ -67,6 +67,11 @@ class ACInfinitySensor(
             model=DEVICE_MODEL.get(device.state.type),
             manufacturer="AC Infinity",
             sw_version=str(device.state.version),
+            # identifiers pin our entities to our own device record even if
+            # another integration (e.g. august cloud) claims this MAC as a
+            # connection on its device; connections-only DeviceInfo re-homed
+            # entities onto a lock device on 2026-08-01 (see SPEC.md).
+            identifiers={(DOMAIN, device.address)},
             connections={(dr.CONNECTION_BLUETOOTH, device.address)},
         )
         self._async_update_attrs()

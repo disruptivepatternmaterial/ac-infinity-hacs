@@ -81,6 +81,8 @@ class ACInfinityGrowLight(
             model=DEVICE_MODEL.get(device.state.type),
             manufacturer="AC Infinity",
             sw_version=str(device.state.version),
+            # identifiers pin entities to our own device; see sensor.py note.
+            identifiers={(DOMAIN, device.address)},
             connections={(dr.CONNECTION_BLUETOOTH, device.address)},
         )
         self._last_write_signature: tuple[int, int] | None = None
