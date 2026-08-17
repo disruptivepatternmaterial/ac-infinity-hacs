@@ -3,7 +3,7 @@
 Local Bluetooth (BLE) control of AC Infinity UIS fan controllers in Home Assistant — no cloud dependency.
 
 **This repo:** [disruptivepatternmaterial/ac-infinity-hacs](https://github.com/disruptivepatternmaterial/ac-infinity-hacs)  
-**Current release:** [v1.3.0](https://github.com/disruptivepatternmaterial/ac-infinity-hacs/releases/tag/v1.3.0)  
+**Current release:** [v1.3.2](https://github.com/disruptivepatternmaterial/ac-infinity-hacs/releases/tag/v1.3.2)  
 **HACS name:** `AC Infinity BLE (NET Fork)`  
 **Integration domain:** `ac_infinity_ble` (coexists with cloud `ac_infinity` / dalinicus)
 
@@ -34,7 +34,7 @@ Copy `custom_components/ac_infinity_ble/` to `/config/custom_components/` and re
 | Step | Command / action |
 |------|------------------|
 | Pull latest | HACS → Update **AC Infinity BLE (NET Fork)** |
-| Verify version | `/config/custom_components/ac_infinity_ble/manifest.json` → `"version": "1.3.0"` |
+| Verify version | `/config/custom_components/ac_infinity_ble/manifest.json` → `"version": "1.3.2"` |
 | Restart | Restart Home Assistant |
 | Smoke test | Fan speed change; temp/humidity show `unknown` when device has not reported (not `0`) |
 
@@ -53,10 +53,33 @@ Copy `custom_components/ac_infinity_ble/` to `/config/custom_components/` and re
 | **Diagnostics** | `ble_last_rssi`, `ble_last_seen`, `ble_last_error`, `ble_poll_failures` |
 | **Sensor fidelity** | Temp/hum/VPD read raw `state.tmp/hum/vpd` — missing readings stay `unknown`, not fabricated `0` |
 | **Write coalescing** | Duplicate fan/light commands within 5s skipped |
+| **Device identity** | `identifiers={(domain, mac)}` + detach migration if HA merged us onto another integration’s device |
 
 ---
 
 ## Changelog (NET Fork)
+
+### v1.3.2 — device registry re-home fix
+
+- **Bug:** Library controller `G-SGR1J` entities could appear under an August
+  smart lock after Home Assistant merged device-registry records that shared
+  bluetooth identity metadata.
+- **Fix:** Pin entities with `identifiers={(ac_infinity_ble, mac)}`, detach our
+  identifier/connection/config entry from any contaminated shared device, then
+  rebind entities onto the dedicated Controller device.
+- **Docs/tests:** SPEC incident notes; detach-helper unit tests.
+
+### v1.3.1 — fourth/fifth review-pass fixes
+
+Fixes from a 2026-07-02 review pass plus a 4-model re-review panel (see `LAND.md`).
+
+- **Diagnostics:** `ble_last_error` is truncated to 255 chars at the source (HA rejects longer states).
+- **Poll integrity:** a `None` update response (unreachable with pinned ac-infinity-ble 0.4.3) now raises `InvalidResponseError` instead of counting as a successful poll.
+- **Options:** saving the options form merges over existing options, so a manually-added `ports` map survives a save; an explicit `ports: []` in options now clears a map stored in data.
+- **Unload:** teardown uses the platform list recorded at setup, not one recomputed from possibly-edited entry data.
+- **Port guard:** a `ports` map on a device type without per-port protocol support (`type` not in 7/9/11/12) is refused at setup with a warning instead of silently driving one load from N entities.
+- **Data fidelity:** fan percentage / light brightness / per-port `is_on` report `unknown` (`None`) when never observed, instead of a fabricated off/0%; a real 0 still reads 0.
+- **Tests:** options-flow merge, `_read_ports` precedence, unload platforms, multi-port `None` response, entity attribute fidelity; suite now **70 cases**.
 
 ### v1.3.0 — multi-model review hardening
 
@@ -124,7 +147,7 @@ cd ac-infinity-hacs
 python3 -m pytest tests/ -v
 ```
 
-Requires only `pytest` (HA/upstream libs stubbed in `tests/conftest.py`). **44 tests** cover sensor null/zero passthrough, BLE-manager poll scheduling and failure back-off, fan/light write coalescing (incl. retry-after-failure), the coordinator poll-gating lifecycle and startup-wait shortcut, and the controller short-response guard and bounded disconnect.
+Requires only `pytest` (HA/upstream libs stubbed in `tests/conftest.py`). **64 tests** cover sensor null/zero passthrough, BLE-manager poll scheduling and failure back-off, fan/light write coalescing (incl. retry-after-failure), the coordinator poll-gating lifecycle and startup-wait shortcut, the controller short/None-response guard and bounded disconnect, options-flow merge semantics, `_read_ports` precedence, unload platform bookkeeping, and entity unknown-vs-zero attribute fidelity.
 
 Compile check:
 

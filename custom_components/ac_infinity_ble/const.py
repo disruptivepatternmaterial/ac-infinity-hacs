@@ -35,6 +35,11 @@ DEVICE_MODEL = {1: "Controller 67", 7: "Controller 69", 11: "Controller 69 Pro",
 # When an entry's data/options carries CONF_PORTS, the integration creates one
 # entity per listed port instead of a single choose_port fan.
 CONF_PORTS = "ports"
+# Upstream protocol only puts the port byte on the wire for these device types
+# (get_model_data/set_level append [255, port] iff type in [7, 9, 11, 12] in
+# ac-infinity-ble 0.4.3). On any other type every "port" would silently
+# address the same load, so a CONF_PORTS map is refused at setup.
+PORT_CAPABLE_TYPES = {7, 9, 11, 12}
 PORT_KIND_FAN = "fan"
 PORT_KIND_LIGHT = "light"
 

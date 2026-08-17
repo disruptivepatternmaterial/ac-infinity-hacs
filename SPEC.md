@@ -6,6 +6,29 @@ on 2026-06-15. Where something is not yet implemented it is called out under
 "Known limitations". Do not add claims here that are not verified on a real
 device.
 
+## 2026-08-01 updates (v1.3.2) — device registry re-home fix
+
+Verified on BowmanMtn (HA 2026.7.4): Library controller `G-SGR1J`
+(`3C:84:27:2D:99:7A`) had been merged onto the August “Back Door Lock”
+(`ASL-05`, bluetooth `78:9C:85:34:72:C4`). Fan/sensor entities for the real
+Controller 69 Pro therefore appeared under the lock device.
+
+Cause: entity `DeviceInfo` historically set only
+`connections={(bluetooth, mac)}`. Once HA linked that MAC onto the August
+device record (and later also stored identifier `(ac_infinity_ble, mac)` on
+it), reloads kept updating the contaminated device instead of creating a
+dedicated AC Infinity device.
+
+Fix:
+- Fan/sensor/light `DeviceInfo` now includes
+  `identifiers={(DOMAIN, address)}` in addition to the bluetooth connection.
+- `async_setup_entry` calls `_async_detach_from_contaminated_device` before
+  platform setup: if the registry device for our address also has foreign
+  identifiers or a second bluetooth MAC, strip our identifier/connection and
+  remove our config entry from that device so a dedicated device can be used.
+- After platforms load, `_async_rebind_entry_entities` updates any entity still
+  pointing at the old shared device_id onto the clean AC Infinity device.
+
 ## 2026-06-29 updates (v1.3.0) — review fixes
 
 Landed from the multi-model code review (see `LAND.md`):
@@ -32,10 +55,11 @@ Landed from the multi-model code review (see `LAND.md`):
   `async_timeout(DISCONNECT_TIMEOUT_SECONDS=10)` and never propagates, so a hung disconnect
   cannot keep holding the lock either.
 - **Robust to short BLE responses.** `controller.update` / `MultiPortController.update` guard
-  `len(data) >= MIN_MODEL_DATA_LEN (19)` before indexing `data[12/15/18]`. A `None` response is a
-  benign no-op; a non-empty but truncated/corrupt frame raises `InvalidResponseError` instead of
-  `IndexError`, which the coordinator records as a poll failure (`ble_last_error` /
-  `ble_poll_failures`) and backs off, rather than silently counting it as a successful poll.
+  `len(data) >= MIN_MODEL_DATA_LEN (19)` before indexing `data[12/15/18]`. A `None` response
+  (unreachable with pinned ac-infinity-ble 0.4.3, which returns bytes or raises) and a non-empty
+  but truncated/corrupt frame both raise `InvalidResponseError` instead of `IndexError`, which
+  the coordinator records as a poll failure (`ble_last_error` / `ble_poll_failures`) and backs
+  off, rather than silently counting it as a successful poll.
 - **No 30s boot stall for offline devices.** `coordinator.async_wait_ready` returns immediately
   when `controller.name` is already populated (state restored from cached service data), instead
   of blocking HA startup up to `DEVICE_STARTUP_TIMEOUT` waiting for an advertisement; it logs at
@@ -221,6 +245,14 @@ Verification (live G-622UC, 2026-06-15, library logger at debug):
   this issue.
 - Multi-port light scheduling depends on Node-RED/HA (the controller's
   on-device schedule does not run while in BLE mode).
+- Only ON/OFF modes are modeled. The device's `work_type` can be 3-12 (AUTO,
+  TIMER, CYCLE, SCHEDULE, VPD, AI — see upstream `protocol.get_mode`), but
+  `is_on`/`PortState.level` treat anything other than 2 as off, so a port
+  running under AUTO reads as off/0%. Any HA write sends `set_level` with
+  work_type 1 or 2 (the only values the protocol accepts), replacing the
+  device-side mode with plain ON/OFF. Verify in code:
+  `models.py::PortState.is_on` and `protocol.set_level`'s
+  `work_type not in [1, 2]` guard in ac-infinity-ble 0.4.3.
 
 ## Verification commands
 

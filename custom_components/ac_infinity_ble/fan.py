@@ -26,6 +26,7 @@ from homeassistant.util.percentage import (
 from .const import DEVICE_MODEL, DOMAIN, PORT_KIND_FAN, WRITE_COALESCE_SECONDS
 from .controller import MultiPortController
 from .coordinator import ACInfinityDataUpdateCoordinator
+from .debug_ndjson import agent_log
 from .models import ACInfinityData, PortConfig
 
 SPEED_RANGE = (1, 10)
@@ -77,6 +78,8 @@ class ACInfinityFan(
             model=DEVICE_MODEL.get(device.state.type),
             manufacturer="AC Infinity",
             sw_version=str(device.state.version),
+            # identifiers pin entities to our own device; see sensor.py note.
+            identifiers={(DOMAIN, device.address)},
             connections={(dr.CONNECTION_BLUETOOTH, device.address)},
         )
         self._last_write_speed: int | None = None
@@ -103,7 +106,51 @@ class ACInfinityFan(
 
         if self._is_duplicate_write(speed):
             return
-        await self._device.set_speed(speed)
+        # #region agent log
+        agent_log(
+            "H3",
+            "fan.py:ACInfinityFan.async_set_percentage",
+            "fan write start",
+            {
+                "address": self._device.address,
+                "percentage": percentage,
+                "speed": speed,
+                "is_on": self._device.is_on,
+                "state_fan": getattr(self._device.state, "fan", None),
+                "work_type": getattr(self._device.state, "work_type", None),
+            },
+        )
+        # #endregion
+        try:
+            await self._device.set_speed(speed)
+        except Exception as err:  # noqa: BLE001 - debug capture
+            # #region agent log
+            agent_log(
+                "H3",
+                "fan.py:ACInfinityFan.async_set_percentage",
+                "fan write failed",
+                {
+                    "address": self._device.address,
+                    "speed": speed,
+                    "error_type": type(err).__name__,
+                    "error": str(err)[:300],
+                },
+            )
+            # #endregion
+            raise
+        # #region agent log
+        agent_log(
+            "H3",
+            "fan.py:ACInfinityFan.async_set_percentage",
+            "fan write ok",
+            {
+                "address": self._device.address,
+                "speed": speed,
+                "state_fan": getattr(self._device.state, "fan", None),
+                "work_type": getattr(self._device.state, "work_type", None),
+            },
+        )
+        # #endregion
         self._record_write(speed)
         self._async_update_attrs()
         self.async_write_ha_state()
@@ -120,7 +167,35 @@ class ACInfinityFan(
             speed = math.ceil(percentage_to_ranged_value(SPEED_RANGE, percentage))
             if self._is_duplicate_write(speed):
                 return
-        await self._device.turn_on(speed)
+        # #region agent log
+        agent_log(
+            "H3",
+            "fan.py:ACInfinityFan.async_turn_on",
+            "fan turn_on start",
+            {
+                "address": self._device.address,
+                "percentage": percentage,
+                "speed": speed,
+                "work_type": getattr(self._device.state, "work_type", None),
+            },
+        )
+        # #endregion
+        try:
+            await self._device.turn_on(speed)
+        except Exception as err:  # noqa: BLE001 - debug capture
+            # #region agent log
+            agent_log(
+                "H3",
+                "fan.py:ACInfinityFan.async_turn_on",
+                "fan turn_on failed",
+                {
+                    "address": self._device.address,
+                    "error_type": type(err).__name__,
+                    "error": str(err)[:300],
+                },
+            )
+            # #endregion
+            raise
         if speed is not None:
             self._record_write(speed)
         self._async_update_attrs()
@@ -130,7 +205,33 @@ class ACInfinityFan(
         """Turn off the fan."""
         if self._is_duplicate_write(0):
             return
-        await self._device.turn_off()
+        # #region agent log
+        agent_log(
+            "H3",
+            "fan.py:ACInfinityFan.async_turn_off",
+            "fan turn_off start",
+            {
+                "address": self._device.address,
+                "work_type": getattr(self._device.state, "work_type", None),
+            },
+        )
+        # #endregion
+        try:
+            await self._device.turn_off()
+        except Exception as err:  # noqa: BLE001 - debug capture
+            # #region agent log
+            agent_log(
+                "H3",
+                "fan.py:ACInfinityFan.async_turn_off",
+                "fan turn_off failed",
+                {
+                    "address": self._device.address,
+                    "error_type": type(err).__name__,
+                    "error": str(err)[:300],
+                },
+            )
+            # #endregion
+            raise
         self._record_write(0)
         self._async_update_attrs()
         self.async_write_ha_state()
@@ -140,12 +241,15 @@ class ACInfinityFan(
         """Handle updating _attr values."""
         self._attr_is_on = self._device.is_on
         fan_speed = self._device.state.fan
-        self._attr_percentage = (
-            ranged_value_to_percentage(SPEED_RANGE, fan_speed)
-            if fan_speed is not None and fan_speed > 0
-            else 0
-        )
-
+        if fan_speed is None:
+            # Never observed a speed: unknown, not 0% (data-fidelity rule).
+            self._attr_percentage = None
+        elif fan_speed > 0:
+            self._attr_percentage = ranged_value_to_percentage(
+                SPEED_RANGE, fan_speed
+            )
+        else:
+            self._attr_percentage = 0
     @callback
     def _handle_coordinator_update(self, *args: Any) -> None:
         """Handle data update."""
@@ -157,7 +261,43 @@ class ACInfinityFan(
         self.async_on_remove(
             self._device.register_callback(self._handle_coordinator_update)
         )
-        return await super().async_added_to_hass()
+        result = await super().async_added_to_hass()
+        # #region agent log
+        registry_device_id = getattr(self, "device_id", None) or getattr(
+            self.registry_entry, "device_id", None
+        )
+        device = (
+            dr.async_get(self.hass).async_get(registry_device_id)
+            if registry_device_id
+            else None
+        )
+        agent_log(
+            "H1",
+            "fan.py:ACInfinityFan.async_added_to_hass",
+            "fan entity device binding",
+            {
+                "entity_id": self.entity_id,
+                "unique_id": self.unique_id,
+                "address": self._device.address,
+                "device_id": registry_device_id,
+                "device_name": getattr(device, "name_by_user", None)
+                or getattr(device, "name", None),
+                "device_model": getattr(device, "model", None),
+                "device_mfr": getattr(device, "manufacturer", None),
+                "identifiers": list(getattr(device, "identifiers", []) or []),
+                "connections": list(getattr(device, "connections", []) or []),
+                "merged_with_foreign": bool(
+                    device
+                    and (
+                        any(i[0] != DOMAIN for i in device.identifiers)
+                        or len(device.connections) > 1
+                    )
+                ),
+            },
+            run_id="post-fix",
+        )
+        # #endregion
+        return result
 
 
 class ACInfinityPortFan(
@@ -191,6 +331,8 @@ class ACInfinityPortFan(
             model=DEVICE_MODEL.get(device.state.type),
             manufacturer="AC Infinity",
             sw_version=str(device.state.version),
+            # identifiers pin entities to our own device; see sensor.py note.
+            identifiers={(DOMAIN, device.address)},
             connections={(dr.CONNECTION_BLUETOOTH, device.address)},
         )
         self._last_write_signature: tuple[int, int] | None = None
@@ -260,8 +402,14 @@ class ACInfinityPortFan(
     def _async_update_attrs(self) -> None:
         """Handle updating _attr values."""
         state = self._port_state()
-        self._attr_is_on = bool(state and state.is_on)
-        level = state.level if state else 0
+        if state is None or state.work_type is None:
+            # Port never polled or commanded (MultiPortController seeds an
+            # empty PortState per port): unknown, not off/0%.
+            self._attr_is_on = None
+            self._attr_percentage = None
+            return
+        self._attr_is_on = state.is_on
+        level = state.level
         self._attr_percentage = (
             ranged_value_to_percentage(SPEED_RANGE, level) if level > 0 else 0
         )

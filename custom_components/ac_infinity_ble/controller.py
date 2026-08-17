@@ -116,7 +116,10 @@ class PortAwareController(ACInfinityController):
                 )
                 data = await self._send_command(command)
                 if data is None:
-                    return
+                    # With pinned ac-infinity-ble==0.4.3 _send_command returns
+                    # notification bytes or raises; None would mean no response,
+                    # which must count as a poll failure, not a silent success.
+                    raise InvalidResponseError("no update response")
                 if len(data) < MIN_MODEL_DATA_LEN:
                     raise InvalidResponseError(
                         f"short update response ({len(data)} bytes)"
@@ -199,9 +202,10 @@ class MultiPortController(PortAwareController):
     Used for controllers that drive several loads at once (e.g. the office
     69 Pro: two fans + a grow light). The upstream library models a single
     port in ``DeviceInfo``; this subclass keeps a per-port ``PortState`` cache
-    and addresses each port explicitly via the protocol's port argument, all
-    over a single shared BLE connection (the link is held open for
-    ``DISCONNECT_DELAY`` between commands).
+    and addresses each port explicitly via the protocol's port argument. Each
+    command/poll runs in its own connect/disconnect cycle (``finally:
+    _execute_disconnect``) because the controller answers only the first
+    command per BLE connection (see SPEC.md "Multi-port control").
 
     NOTE: the BLE port index is one-based (cloud "Port N" -> BLE byte N),
     verified live on a Controller 69 Pro (see SPEC.md "Port addressing").
@@ -232,7 +236,7 @@ class MultiPortController(PortAwareController):
                 )
                 data = await self._send_command(command)
                 if data is None:
-                    return
+                    raise InvalidResponseError(f"no port-{port} response")
                 if len(data) < MIN_MODEL_DATA_LEN:
                     raise InvalidResponseError(
                         f"short port-{port} response ({len(data)} bytes)"

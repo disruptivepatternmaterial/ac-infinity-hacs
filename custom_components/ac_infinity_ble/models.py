@@ -56,3 +56,6 @@ class ACInfinityData:
     device: ACInfinityController
     coordinator: ACInfinityDataUpdateCoordinator
     ports: list[PortConfig] = field(default_factory=list)
+    # Platform list actually forwarded at setup, so unload tears down exactly
+    # what was loaded even if the entry's ports were edited in the meantime.
+    platforms: list = field(default_factory=list)
